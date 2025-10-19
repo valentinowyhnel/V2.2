@@ -9,22 +9,7 @@ Building in python as major.
 Xerror build on python2 as a primary language and Django2 as web framework along with, websockets(django channel) on celery server and Redis srver to achieve asynchronization. On front side it supports Djanog default template enging language which is jinga2 and jquery.   
 
 
-How to use this porject: </br>
- 1.Activate virtual enviroment by using following command( make sure you have pre-installed py virtual env) </br>
-      souce env/bin/activate</br>
- 2. Start redis server</br>
-      service redis-server start</br>
- 3. start python srver </br>
-      1. cd xerror </br>
-      2. python manage.py runserver </br>
- 4. start celery server( run this in new terminal) </br>
-      1. cd xerror </br>
-      2. celery -A xerror worker -l info </br>
- 5. start msfrpc server for metasploit </br>
-      msfrpcd -P 123 -S -a 127.0.0.1</br>
- 6. start openvas server and set OMP server credientials to admin@admin 127.0.0.1 9392 </br>
- 
- 
+
  You are goog to go </br>
  
  This is xerror Beta version, soon complete version will be uploaded with complete explanation and detail of each step ...   </br>
