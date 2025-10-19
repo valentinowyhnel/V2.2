@@ -66,4 +66,83 @@ How to use this porject: </br>
  
 </br>
 
-<b>Contact :</b> exploitmee@protonmail.com 
+<b>Contact :</b> exploitmee@protonmail.com
+
+# Guide d'installation et de configuration
+
+Ce document décrit les étapes nécessaires pour installer et configurer le projet.
+
+## Prérequis
+
+- **Python 3.12** ou une version ultérieure
+- **Virtualenv** pour gérer les environnements virtuels
+- **Django** (inclus dans les dépendances du projet)
+- **pip** pour installer les dépendances
+- Accès à un serveur Metasploit (si nécessaire pour certaines fonctionnalités)
+
+## Étapes d'installation
+
+### 1. Cloner le dépôt
+```bash
+git clone https://github.com/valentinowyhnel/V2.2.git
+cd V2.2
+```
+
+### 2. Créer un environnement virtuel
+```bash
+python3 -m venv env
+source env/bin/activate
+```
+
+### 3. Installer les dépendances
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configurer les variables d'environnement
+Créer un fichier `.env` à la racine du projet et ajouter les variables suivantes :
+```env
+DJANGO_SETTINGS_MODULE=xerror.settings
+```
+
+### 5. Appliquer les migrations
+```bash
+python manage.py migrate
+```
+
+### 6. Lancer le serveur de développement
+```bash
+python manage.py runserver
+```
+
+Le projet sera accessible à l'adresse [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+## Dépendances principales
+
+- **Django** : Framework web principal
+- **python-decouple** : Gestion des variables d'environnement
+- **PyPDF2** : Génération de fichiers PDF
+- **nmap** : Analyse réseau
+- **celery** : Gestion des tâches asynchrones
+
+## Notes supplémentaires
+
+- Assurez-vous que le serveur Metasploit est configuré si vous utilisez des fonctionnalités liées à Metasploit.
+- Pour les environnements de production, configurez un serveur WSGI tel que Gunicorn et un serveur web comme Nginx.
+- Utilisez une base de données comme PostgreSQL pour la production (au lieu de SQLite).
+
+## Dépannage
+
+### Erreur : `ModuleNotFoundError: No module named 'decouple'`
+Assurez-vous que le module `python-decouple` est installé dans votre environnement virtuel :
+```bash
+pip install python-decouple
+```
+
+### Erreur : `AttributeError` ou `ImportError`
+Vérifiez que toutes les dépendances sont correctement installées et que les migrations ont été appliquées.
+
+### Erreur : `msfrpc non disponible`
+Installez le client Metasploit ou configurez un serveur Metasploit accessible.
+
+Pour toute autre question, consultez la documentation ou ouvrez une issue sur le dépôt GitHub.

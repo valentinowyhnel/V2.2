@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-from __future__ import print_function
-from openvas_lib import VulnscanManager, VulnscanException
+
+import nmap
 from threading import Semaphore
 from functools import partial
 from xml.etree import ElementTree
@@ -15,7 +15,7 @@ import re
 import time
 import shlex
 
-from channels import Group
+from channels.layers import get_channel_layer
 
 from xerror.settings import BASE_DIR
 
@@ -54,15 +54,18 @@ opv_job_id  = None
 
 def my_print_status(i):
 
-	Group('pool').send({
-                "text": json.dumps ({
-                    "action": "openvas_running_status",
-                    "job_id": opv_job_id,
-                    "job_name": opv_ip_addr,
-                    "job_openvas_current_status": str(i),
-                    "job_openvas_log": "Running\n"
-                })
-            })
+	channel_layer = get_channel_layer()
+	channel_layer.group_send(
+		"pool",
+		{
+			"type": "openvas.running.status",
+			"action": "openvas_running_status",
+			"job_id": opv_job_id,
+			"job_name": opv_ip_addr,
+			"job_openvas_current_status": str(i),
+			"job_openvas_log": "Running\n",
+		},
+	)
 	print("[ openvas ] "+ str(i)),
 	sys.stdout.flush()
 
@@ -174,40 +177,14 @@ def write_report(manager, report_id, ip):
 
 
 
-def run(manager, ip):
-	print("[ openvas ] Opv Running Status  ")
-	Sem = Semaphore(0)
-	scan_id, target_id = manager.launch_scan(
-		target=ip,
-		profile="Full and fast",
-		callback_end=partial(lambda x: x.release(), Sem),
-		callback_progress=my_print_status
-	)
-	Sem.acquire()
-	report_id = manager.get_report_id(scan_id)
-	print(target_id )
-	print(scan_id )
-	print(report_id)
+def run(ip):
+    print("[ nmap ] Scan en cours pour l'adresse IP :", ip)
+    scanner = nmap.PortScanner()
+    scan_result = scanner.scan(ip, arguments='-sV')
 
-	write_report(manager, report_id, ip)
-	manager.delete_scan(scan_id)
-	manager.delete_target(target_id)
-	try:
-		print("[ OPENVAS ] Opv Report creation checking ")
-		opv_csv_file_name = BASE_DIR + '/reports/openvas/opv_'+str(opv_job_id)+"_"+str(ip)+"/csv/"+str(ip)+".csv"
-		print(" [ OPENVAS ] Opv ip address found  ")
-		with open(opv_csv_file_name) as f: 
-			pass 
-
-		print("[ OPENVAS ] Opv Report Creation checked ")
-            
-	except IOError:
-		print("[ OPENVAS ] Opv Report not created, again starting process ")
-		write_report(manager, report_id, ip)
-
-        
-            
-
+    # Exemple de traitement des résultats
+    print("[ nmap ] Résultats du scan :", scan_result)
+    return scan_result
 
 def opv_scan_hacker( opv_id , opv_ip ):
 
@@ -248,12 +225,11 @@ def opv_scan_hacker( opv_id , opv_ip ):
 	
 	ip = opv_ip
 	try:
-		manager = VulnscanManager(openvas_ip, admin_name, admin_password)
-		run(manager, ip  )
+		run(ip  )
 		print("[ openvas ] Ending opv Scanning  ")
 		# return "success"
 
 	except Exception as e:
 		print("[ openvas ] connection error   ")
 		print(e)
-		# return "openvas connection error: " 
+		# return "openvas connection error: "

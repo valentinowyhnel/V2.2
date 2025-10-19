@@ -1,12 +1,7 @@
-#!/root/Music/finlazation/env/bin/python
-# Copyright (c) Twisted Matrix Laboratories.
-# See LICENSE for details.
+#!/workspaces/V2.2/env/bin/python3
 import sys
-
-try:
-    import _preamble
-except ImportError:
-    sys.exc_clear()
-
 from twisted.scripts.htmlizer import run
-run()
+if __name__ == '__main__':
+    if sys.argv[0].endswith('.exe'):
+        sys.argv[0] = sys.argv[0][:-4]
+    sys.exit(run())

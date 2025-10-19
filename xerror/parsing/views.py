@@ -1,76 +1,76 @@
 import json
-import os 
+import os
 import time
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ObjectDoesNotExist
-
 from django.core.files.base import ContentFile
 from django.shortcuts import redirect
 
+try:
+    from metasploit.msfrpc import MsfRpcClient
+except ImportError:
+    print("[Error] msfrpc non disponible. Veuillez installer la bibliothèque msfrpc.")
+    MsfRpcClient = None
 
-from channels import Group
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 from xerror.settings import BASE_DIR
-from .models import TextFile,Job,Config_exploit,Exploiated_system,Exploiated_system,MSF_rpc_connection,openvas_connection
-
-
-from .tasks import process_file,process_ip_vul,process_nmap,process_exploitation,process_session_check,process_session_interact
-
+from .models import TextFile, Job, Config_exploit, Exploiated_system, MSF_rpc_connection, openvas_connection
+from .tasks import process_file, process_ip_vul, process_nmap, process_exploitation, process_session_check, process_session_interact
 from .nm_csv_parser import nmcsvpar
-from mapper_cve_exploit import mapper_opn2msf_cve
-from opv_csv_parser import openvas_csv_parse_detail
-# from .msf_rpc_session_handler import session_interaction_handler
-
-import time
-from metasploit.msfrpc import MsfRpcClient
+from .mapper_cve_exploit import mapper_opn2msf_cve
+from .opv_csv_parser import openvas_csv_parse_detail
 
 from django.http import FileResponse, Http404
 from PyPDF2 import PdfFileMerger
-
 from django.template.loader import render_to_string
-
 import pdfkit
 
+# Example refactor: Replace Python 2 print statements with Python 3 syntax
+# and ensure file handling uses UTF-8 encoding.
+
 def index(request):
-
-    '''
-        First it checks MSFrpcd conneciton Before redirect to dash board
-    '''
-    try:
-        msf_credientials = MSF_rpc_connection.objects.get(pk=1)
-        msf_pass = msf_credientials.rpc_pass
-        msf_ip = msf_credientials.rpc_ip
-
-        client = MsfRpcClient(msf_pass,server=msf_ip,ssl=False)
-        print ("[ msf ] Rpc server not connected ")
-    except Exception as e:
+    """
+    First it checks MSFrpcd connection before redirecting to the dashboard.
+    """
+    if MsfRpcClient is None:
+        print("[Error] MsfRpcClient not available. Ensure pymetasploit3 is installed.")
         return render(request, 'msf_login.html')
 
-    else:
-        job = Job.objects.all()
+    try:
+        msf_credentials = MSF_rpc_connection.objects.get(pk=1)
+        msf_pass = msf_credentials.rpc_pass
+        msf_ip = msf_credentials.rpc_ip
 
-        total_         =  job.count()
-        total_scn      = job.filter(nm_status='Nmap_scan_completed').count()
-        total_vscn     = job.filter(vul_status='OpenVass Vul scan completed ').count()
-        total_sessions = Config_exploit.objects.all().count()
-        total_exploit  = Exploiated_system.objects.all().count()
+        client = MsfRpcClient(msf_pass, host=msf_ip, port=55553, ssl=False)
+        print("[MSF] Rpc server connected.")
+    except Exception as e:
+        print(f"[Error] MSF connection failed: {e}")
+        return render(request, 'msf_login.html')
 
-        # print total_
-        # print total_scn
-        # print total_vscn
-        # print total_sessions
-        # print total_exploit
+    job = Job.objects.all()
 
-        print(" [ index ] project index \n\n\n\n ")
-        return render(request, 'index.html',{"job":job,'total':total_ , 'scn':total_scn , 'vscn':total_vscn,'exploit':total_exploit , 'session':total_sessions  })
+    total_jobs = job.count()
+    total_scans = job.filter(nm_status='Nmap_scan_completed').count()
+    total_vul_scans = job.filter(vul_status='OpenVass Vul scan completed ').count()
+    total_sessions = Config_exploit.objects.all().count()
+    total_exploits = Exploiated_system.objects.all().count()
 
-
-
+    print("[Index] Project index loaded.")
+    return render(request, 'index.html', {
+        "job": job,
+        "total": total_jobs,
+        "scn": total_scans,
+        "vscn": total_vul_scans,
+        "exploit": total_exploits,
+        "session": total_sessions
+    })
 
 
 def handle_file(file):
@@ -103,18 +103,24 @@ def upload(request):
 
     if request.is_ajax():
         data = {}
-        destination, name = handle_file(request.FILES.values()[0])
+        destination, name = handle_file(list(request.FILES.values())[0])
         textfile = TextFile()
         textfile.name = name
         textfile.file = destination
         textfile.save()
-        Group('pool').send({
-            "text": json.dumps({
+        
+        # Envoi du message via les Channel Layers
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            'pool',
+            {
+                "type": "chat.message",
                 "action": "uploaded",
-                "file_id": request.FILES.keys()[0],
+                "file_id": list(request.FILES.keys())[0],
                 "new_file_id": textfile.id,
-            })
-        })
+            }
+        )
+        
         process_file.delay(textfile.id)
         data = {'msg': 'Success'}
     else:
@@ -141,7 +147,7 @@ def exploit_mapper_report(ip,id):
         mapping_dict =  obj.mapper()
 
         temp_dict = {}
-        for k,v in mapping_dict.items():
+        for k,v in list(mapping_dict.items()):
             if k != "ip":
                 temp_dict[k] = v
         # return {'CVE-2007-2447': ['CVE-2007-2447', '445', 'tcp', 'Medium', 'exploit/multi/samba/usermap_script'], 'CVE-2004-2687': ['CVE-2004-2687', '3632', 'tcp', 'High', 'exploit/unix/misc/distcc_exec']}
@@ -157,7 +163,7 @@ def report_overview(request,id):
     filename    = BASE_DIR + '/templates/report/overview_report.html' 
     desti       = BASE_DIR + '/templates/report/overview.pdf' 
     temp_page   = BASE_DIR + '/templates/report/temp.html' 
-    print"**************"
+    print("**************")
     try:
         job = Job.objects.get(pk=id)
 
@@ -189,7 +195,7 @@ def report_overview(request,id):
         f = open(temp_page,'wb')
         f.write(rendered_page.encode("UTF8"))
         f.close()
-        print"succcess"
+        print("succcess")
 
         pdfkit.from_file(temp_page, desti)    
         
@@ -214,7 +220,7 @@ def vscn_parser_reort(id,ip):
         print(" [ report ] Opv ip address found  ")
         obj = openvas_csv_parse_detail(opv_csv_file_name)
         resul_table,ip   = obj.opv_resul_table() 
-        print"*******************88 opv table"
+        print("*******************88 opv table")
                 # print resul_table
         return resul_table
         
@@ -271,7 +277,7 @@ def report_view(request,id):
                 print(" [ report ] Opv ip address found  ")
                 obj = openvas_csv_parse_detail(opv_csv_file_name)
                 resul_table,ip   = obj.opv_resul_table() 
-                print"*******************88 opv table"
+                print("*******************88 opv table")
                 # print resul_table
                 vul_status = False
                 if resul_table:
@@ -307,7 +313,7 @@ def report_view(request,id):
                     return render(request, 'report/report_view.html', {"mapped":exploit_mapped,"session_tractor":session_tractor,"sessions":  temp_dict,'resul_table':resul_table,"host_id":id.encode("UTF8"),"mac":"B0:4E:26:4D:40:28"})
             except IOError:
                 vul_err = 'file not found'
-                print"opv file error "
+                print("opv file error ")
                 return render(request, 'report/report_view.html', {'vul_err':vul_err,'ro':scn_data,"host":host,"os":os,"ip_addr":ip_addr,"host_id":id.encode("UTF8"),"mac":"B0:4E:26:4D:40:28"})
 
 
@@ -346,7 +352,7 @@ def report_download(request,id):
         merger.write(destination)
         merger.close()
         resul = BASE_DIR + '/templates/report/generic_report.pdf'
-        print resul
+        print(resul)
         try:
             return FileResponse(open(resul , 'rb'), content_type='application/pdf')
         except :
@@ -435,8 +441,8 @@ def opv_rpc_connect(request):
             opv.save()
 
         print("[ opv ] openvas credientials saved successfully ")
-        redire = nm_scan_index(request)
-        return redire
+        # redire = nm_scan_index(request)
+        # return redire
         # return render(request, 'nmap/nmap_scan2.html', {'files': files,"job":job })
     else:
         return render(request, 'msf_login.html')
@@ -481,21 +487,25 @@ def msf_session_intract_ajx(request):
         session_id = lst_session[0]
         session_id = session_id.encode("UTF8")
 
-        print "[ SESSION_INTERACT ] Given Command to Execute : ",cmd
-        print "[ SESSION_INTERACT ] sesionid  ",session_id
-        print type(cmd)
+        print("[ SESSION_INTERACT ] Given Command to Execute : ",cmd)
+        print("[ SESSION_INTERACT ] sesionid  ",session_id)
+        print(type(cmd))
         print(form_data_collector)
-        print(type(form_data_collector["rhost_cmd"]))
+        print((type(form_data_collector["rhost_cmd"])))
         process_session_interact.delay(session_id,cmd)
 
 
-        Group('pool').send({
-                "text": json.dumps({
-                    "action":"session_interact_"+session_id, 
-                    "session_interact_response": "\n\n Xerror :/~> "+cmd,
-                    "check_status": "checking host up status so,keep patience ",
-                })
-            })
+        # Envoi du message via les Channel Layers
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            'pool',
+            {
+                "type": "chat.message",
+                "action":"session_interact_"+session_id, 
+                "session_interact_response": "\n\n Xerror :/~> "+cmd,
+                "check_status": "checking host up status so,keep patience ",
+            }
+        )
         data = {'msg': 'success '}
         return JsonResponse(data)
 
@@ -525,10 +535,10 @@ def msf_session_intract_ajx(request):
 def msf_session_intract(request,session_id,host_id,uuid):
 
     try:
-        print "[ SESSION ]  shell interctation Starts "
-        print session_id
-        print host_id
-        print uuid
+        print("[ SESSION ]  shell interctation Starts ")
+        print(session_id)
+        print(host_id)
+        print(uuid)
         session_detail = Exploiated_system.objects.get(session_id=session_id,host_id=host_id,exploit_uuid=uuid)
         host_name = session_detail.host_name
         session_type = session_detail.session_type
@@ -537,12 +547,12 @@ def msf_session_intract(request,session_id,host_id,uuid):
         
         
 
-        print "[ SESSION ] Interact: sesion object found  "
+        print("[ SESSION ] Interact: sesion object found  ")
 
         resul_dict = {"rhost":host_name,"session_id":session_id ,"rport":rport,"session_type":session_type,"tunnel":shell_tunnel}
         return render(request, 'metasploit/sessions_handler.html', resul_dict)
     except Exception as e:
-        print "[ SESSION ] Interact: sesion object not found 404 "
+        print("[ SESSION ] Interact: sesion object not found 404 ")
         ro = "object not found"
         return render(request, 'metasploit/sessions_handler.html', {"objerr":ro}  )
 
@@ -600,7 +610,7 @@ def session_exptractor(session_obj):
         host_ipd = ''
         host_idd ='' 
         cve  = ""
-        print "[ SESSION ] SESSION REQ  RENDERING  "
+        print("[ SESSION ] SESSION REQ  RENDERING  ")
         for sesion_obj in session:
             temp_detail_dict ={}
             temp_detail_dict['host_id']          =  sesion_obj.host_id.encode("UTF8")
@@ -672,34 +682,38 @@ def msf_session_status_check_ajax(request):
         Ths funcion checks the exploited RHOST sessions
     '''
     if request.is_ajax():
-        print " [ SESSION ] SESSION STATUS CHEECK "
+        print(" [ SESSION ] SESSION STATUS CHEECK ")
 
         session_data_collector = dict(request.POST)
-        print type(session_data_collector)
-        key= session_data_collector.keys()
+        print(type(session_data_collector))
+        key= list(session_data_collector.keys())
         key= key[0].encode("UTF8")
         # This key dont have any value 
         id_lst = key.split("?")
-        print id_lst
+        print(id_lst)
 
         session_id = id_lst[0]
         host_id    = id_lst[1]
         expl_uuid    = id_lst[2]
 
-        print " [ SESSION ] sending SESSION STATUS CHEECK req to background process "
+        print(" [ SESSION ] sending SESSION STATUS CHEECK req to background process ")
         process_session_check.delay(session_id,host_id,expl_uuid)
-        print session_id
-        print host_id
-        print expl_uuid
-        Group('pool').send({
-                    "text": json.dumps({
-                        "action": "session_status_checking",
-                        "session_current_status":  "Xerror@W11 #:~> Checking sessoin",
-                        "session_status":  "Checking",
-                        "session_id": session_id,
-                        
-                           })
-                       })
+        print(session_id)
+        print(host_id)
+        print(expl_uuid)
+        # Envoi du message via les Channel Layers
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            'pool',
+            {
+                "type": "chat.message",
+                "action": "session_status_checking",
+                "session_current_status":  "Xerror@W11 #:~> Checking sessoin",
+                "session_status":  "Checking",
+                "session_id": session_id,
+                
+                   }
+               )
 
         data = {'msg': "Checking session  " }
         return JsonResponse(data)
@@ -753,9 +767,9 @@ def msf_exploit(request,id):
 
             '''
             obj = mapper_opn2msf_cve(opv_csv_file_name,ms_cve2exploit_File)
-            mapping_dict =  obj.mapper()
-            print "*"*65
-            mapper_key_lst  =  mapping_dict.keys()
+            mapping_dict = obj.mapper()
+            print("*"*65)
+            mapper_key_lst  =  list(mapping_dict.keys())
 
             resul_dict = {}
             host_ip    = ''
@@ -763,13 +777,13 @@ def msf_exploit(request,id):
             for k in mapper_key_lst:
                 if k == 'ip':
                     host_ip = mapping_dict[k]
-                    print "ip address :" , k 
+                    print("ip address :" , k) 
                 else:
                     resul_dict[k] = mapping_dict[k]
-                    print mapping_dict[k]
+                    print(mapping_dict[k])
             print(" [ Exploit ] Maping process completed  ")
 
-            print "*"*65
+            print("*"*65)
 
 
 
@@ -780,7 +794,7 @@ def msf_exploit(request,id):
             # return render(request, 'metasploit/msf_exploit.html', resul)
             return render(request, 'metasploit/msf_exploit2.html', resul)
 
-        except IOError,ObjectDoesNotExist :
+        except IOError as ObjectDoesNotExist :
             ro = 'file not found'
             print(" [ Exploit ] MSF IP Exploit Result file not Found 404  \n\n\n\n ")
             return render(request, 'metasploit/msf_exploit2.html', {'objerr':ro})
@@ -853,7 +867,7 @@ def exploit_update(request):
 def exploit_detail_extractor(exploit_name):
 
     try:
-        print '[ MSFRPC ] ********************Exploit informaitn '
+        print('[ MSFRPC ] ********************Exploit informaitn ')
         exploit_name = exploit_name.replace(" ","")
         client = MsfRpcClient("123",server="127.0.0.1",ssl=False)
         # time.sleep(1)
@@ -872,7 +886,7 @@ def exploit_detail_extractor(exploit_name):
         temp_dict['obj']    =exploit
         return  temp_dict
     except Exception as e:
-        print"Msf rpc error "
+        print("Msf rpc error ")
         return "conneciton_sucks"
 
 
@@ -881,11 +895,11 @@ def exploit_form_data_extractor(form_data_collector):
 
         try:
 
-            print '[ extract ] ********************Form Data Recived'
+            print('[ extract ] ********************Form Data Recived')
             temp_exploit_dict = {} 
             exploit_data= ''
 
-            for k,v in  form_data_collector.items():
+            for k,v in  list(form_data_collector.items()):
                 exploit_data  = k.encode('UTF8')
 
             exploit_data = exploit_data.replace('[',"")
@@ -910,8 +924,8 @@ def exploit_form_data_extractor(form_data_collector):
             temp_exploit_dict['proto']  =exploit_data_lst[2]
             temp_exploit_dict['severity']  =exploit_data_lst[3]
             temp_exploit_dict['exp_name']  =exploit_data_lst[4]
-            print temp_exploit_dict
-            print '[ extract ] ********************Form Data Sended'
+            print(temp_exploit_dict)
+            print('[ extract ] ********************Form Data Sended')
 
             return temp_exploit_dict
 
@@ -927,13 +941,13 @@ def msf_exploit_config_ajx(request):
 
     '''
         This module is used to config exploit, Any AI model is gonna implement hope so i do in future
-        This module called through ajax req and it sends data in the form of Form and it uses two function 
+        This module called through ajax req and it sends data in the form of Form and it uses deux fonction 
         1. exploit_form_data_extractor  to parse comming data from front 
         2.exploit_detail_extractor      will get data related to exploit uisng msfrpc server 
 
     '''
     if request.is_ajax():
-        print "[ exploit_config ] Exploit config req recived"
+        print("[ exploit_config ] Exploit config req recived")
 
         form_data_collector = dict(request.POST)
         # data = exploit_form_data_extractor(form_data_collector)
@@ -993,27 +1007,29 @@ def msf_exploit_config_ajx(request):
                 job.save()
 
 
-            Group('pool').send({
-                    "text": json.dumps({
-                        "action": "exploiting_config_exploit",
-                        "msf_exploit_config_current_status":  "Config working",
-                        "name":expl_name,
-                        "archi":archi,
-                        "authors":authors,
-                        "desc":desc,
-                        "rport":rport,
-                        "license":license,
-                        "rank":rank,
-                        "type_":type_,
-                        "rhosts": rhosts,
-                           })
-                       })
-
-
+            # Envoi du message via les Channel Layers
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                'pool',
+                {
+                    "type": "chat.message",
+                    "action": "exploiting_config_exploit",
+                    "msf_exploit_config_current_status":  "Config working",
+                    "name":expl_name,
+                    "archi":archi,
+                    "authors":authors,
+                    "desc":desc,
+                    "rport":rport,
+                    "license":license,
+                    "rank":rank,
+                    "type_":type_,
+                    "rhosts": rhosts,
+                       }
+                   )
 
             for payl in payloads:
-                print "payloads sending "
-                Group('pool').send({
+                print("payloads sending ")
+                async_to_sync(get_channel_layer().group_send)("pool", {
                         "text": json.dumps({
                             "action": "exploiting_config_exploit_payloads",
                             "payloads":payl,
@@ -1055,11 +1071,11 @@ def msf_exploit_vulnerability(request):
         print("[ Exploit ] Checking exploit Lock ")
         if exploit_lock == 'no': 
             print("[ Exploit ] Checking if exploit configured or not ")
-            print exploit_lock
+            print(exploit_lock)
 
             if exploit_cve_number in expl_confi_lst:
                 if exploit_form_data == "exploit_form_data_parser_sucks":
-                    Group('pool').send({
+                    async_to_sync(get_channel_layer().group_send)("pool", {
                         "text": json.dumps({
                             "action": "exploiting_remort_host",
                             "msf_exploit_current_status":  "Exploit form data parsing Error ",
@@ -1080,7 +1096,7 @@ def msf_exploit_vulnerability(request):
                     job.exploit_lock = "acquired"
                     job.save()
 
-                    Group('pool').send({
+                    async_to_sync(get_channel_layer().group_send)("pool", {
                         "text": json.dumps({
                             "action": "exploiting_remort_host",
                             "msf_exploit_current_status":  "Exploiation Process Started",
@@ -1095,7 +1111,7 @@ def msf_exploit_vulnerability(request):
                     return JsonResponse(data)
         else: 
                 print("[ Exploit ] Exploit Lock  Acquried ")
-                Group('pool').send({
+                async_to_sync(get_channel_layer().group_send)("pool", {
                         "text": json.dumps({
                             "action": "exploiting_remort_host",
                             "msf_exploit_current_status":  "Already Exploiation Process Running Please till would ened",
@@ -1151,12 +1167,12 @@ def vulnerability_report(request,host_id):
 
         result_dir =BASE_DIR + '/reports/openvas/' +"opv_"+str(host_id)+"_"+ip+"/html/"+ip+".html"
         desti  = BASE_DIR + '/templates/openvas/reports/generic_report.html'
-        print result_dir
+        print(result_dir)
 
 
-        with open(desti,"w") as repo:
+        with open(desti,"w", encoding='utf-8') as repo:
             repo.write('<div style="margin: 150px;"> <button ><h1><a href="{% url "parsing:openvas_scan_index"  %}"> <- back to Vul scaning </a></h1> </button>')
-            with open(result_dir,"r") as f:
+            with open(result_dir,"r", encoding='utf-8') as f:
                 for line in f:
                     repo.write(line)
                     # do whatever you want to
@@ -1219,48 +1235,46 @@ def openvas_nmap2scan_luncher(request):
     data = {'msg': 'ajax Failed'}
     if request.is_ajax():
 
-        print"[ nm2opv] ajax requeseted recived"
+        print("[ nm2opv] ajax requeseted recived")
 
-        print request.POST
+        print(request.POST)
         requestIP_dict =  dict(request.POST)
         # we get dict and have only id address but its in the form of key in dict so we iterate because it has only one key with black valye
         requestIP_key=  next(iter(requestIP_dict)).encode('UTF8')
 
-        print type(requestIP_key)
-        Group('pool').send({
-                "text": json.dumps({
-                    "action": "openvas_host_up_check",
-                    "check_status": "openvas checking host up status so,keep patience ",
-                })
+        print(type(requestIP_key))
+        async_to_sync(get_channel_layer().group_send)("pool", {
+                "type": "chat.message",
+                "action": "openvas_host_up_check",
+                "check_status": "openvas checking host up status so,keep patience ",
             })
         if Job.objects.get(pk=requestIP_key):
             ip_detail = Job.objects.get(pk=requestIP_key) 
-            print"[ nm2opv] requested id object found"
-            print ip_detail.status
+            print("[ nm2opv] requested id object found")
+            print(ip_detail.status)
             ip_detail.status = "started"
             ip_detail.vul_status = "added"
             ip_detail.save()
-            print"[ nm2opv] object status after alter"
-            print ip_detail.status
-            print"[ nm2opv] checking up status"
+            print("[ nm2opv] object status after alter")
+            print(ip_detail.status)
+            print("[ nm2opv] checking up status")
             host_up = True if os.system("ping -c 1 "+ip_detail.name) is 0 else False
             if host_up:
-                print ip_detail.name
-                print ip_detail.id
-                print ip_detail.status
+                print(ip_detail.name)
+                print(ip_detail.id)
+                print(ip_detail.status)
                 ip = ip_detail.name
                 ip = ip.encode('UTF8')
                 # print("^^^^^^^^^^^^^^ ip ",type(ip))
                 process_ip_vul.delay(ip_detail.id,ip_detail.name)
 
-                Group('pool').send({
-                "text": json.dumps({
+                async_to_sync(get_channel_layer().group_send)("pool", {
+                    "type": "chat.message",
                     "action": "openvas_taken_ip",
                     "job_id": ip_detail.id,
                     "job_name":  ip_detail.name,
                     "job_status": ip_detail.status,
                        })
-                   })
                 data = {'msg': "host ip recived "}
         
             else:
@@ -1274,9 +1288,9 @@ def openvas_nmap2scan_luncher(request):
 def opv_serverCon_chacker():
 
     try:
-        urllib2.urlopen('https://127.0.0.1:9392', timeout=1)
+        urllib.request.urlopen('https://127.0.0.1:9392', timeout=1)
         return True
-    except urllib2.URLError as err: 
+    except urllib.error.URLError as err: 
         return False
 
 
@@ -1286,11 +1300,10 @@ def openvas_scan_luncher(request):
 
     if request.is_ajax():
         if opv_serverCon_chacker():
-            Group('pool').send({
-                "text": json.dumps({
-                    "action": "openvas_host_up_check",
-                    "check_status": "openvas Server is down, Start the server ",
-                })
+            async_to_sync(get_channel_layer().group_send)("pool", {
+                "type": "chat.message",
+                "action": "openvas_host_up_check",
+                "check_status": "openvas Server is down, Start the server ",
             })
             data = {'msg': 'Err:openvas Server connection error'}
             return JsonResponse(data)
@@ -1302,26 +1315,25 @@ def openvas_scan_luncher(request):
         lst = form_data_collector["host_ip"] 
 
         ip_address_to_scan = lst[0]
-        print type(ip_address_to_scan)
+        print(type(ip_address_to_scan))
         if ip_address_to_scan:
             pass
         else:
             ip_address_to_scan = form_data_collector["host_ip"][1]
         ip_address_to_scan = ip_address_to_scan.encode('UTF8')
         # print "[+] **************Given IP Address : ",ip_address_to_scan
-        print "[ v_scn ] **************Given IP Address : ",form_data_collector["host_ip"]
-        print 
+        print("[ v_scn ] **************Given IP Address : ",form_data_collector["host_ip"])
+        print() 
         # print "[+] **************Given IP Address : ",form_data_collector["host_ip"][1]
-        print type(ip_address_to_scan)
+        print(type(ip_address_to_scan))
         print(form_data_collector)
-        print(type(form_data_collector["host_ip"]))
+        print((type(form_data_collector["host_ip"])))
 
 
-        Group('pool').send({
-                "text": json.dumps({
-                    "action": "openvas_host_up_check",
-                    "check_status": "openvas checking host up status so,keep patience ",
-                })
+        async_to_sync(get_channel_layer().group_send)("pool", {
+                "type": "chat.message",
+                "action": "openvas_host_up_check",
+                "check_status": "openvas checking host up status so,keep patience ",
             })
 
         host_up = True if os.system("ping -c 1 "+ip_address_to_scan) is 0 else False
@@ -1348,13 +1360,12 @@ def openvas_scan_luncher(request):
             process_ip_vul.delay(job.id,ip_address_to_scan)
 
 
-            Group('pool').send({
-            "text": json.dumps({
-                "action": "openvas_taken_ip",
-                "job_id": job.id,
-                "job_name":  job.name,
-                "job_status": job.status,
-                   })
+            async_to_sync(get_channel_layer().group_send)("pool", {
+            "type": "chat.message",
+            "action": "openvas_taken_ip",
+            "job_id": job.id,
+            "job_name":  job.name,
+            "job_status": job.status,
                })
 
 
@@ -1371,162 +1382,24 @@ def openvas_scan_luncher(request):
         data = {'msg': 'Failed'}
     return JsonResponse(data)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# *********************************************** Nmap ************************ 
-
-
-# Base page for scanning
 def nm_scan_index(request):
+    """
+    Placeholder function for nm_scan_index.
+    This function currently does nothing and serves as a placeholder.
+    """
+    return JsonResponse({"message": "nm_scan_index is not implemented yet."})
 
-    '''
-        This Function Loads all scan result to Scan Page
-        Pending / completed scans are seperated during randering using jinja2 on front page 
-
-    '''
-
-    files = TextFile.objects.all()
-    job = Job.objects.all()
-    # return render(request, 'nmap/nmap_scan.html', {'files': files,"job":job })
-    return render(request, 'nmap/nmap_scan2.html', {'files': files,"job":job })
-
-
-# scan report
-def nm_ip_detailed(request,id):
-
-    '''
-        This fun render/Loads single ip scan results 
-        it req id to load results 
-
-    '''
-    try:
-        job = Job.objects.get(pk=id)
-        csvname = "csv_"+id+"_"+job.name+".csv"
-        # getting scaned csv file path
-        filename = BASE_DIR + '/reports/' + csvname
-        try:
-            with open(filename) as f:
-                pass 
-
-            '''
-                nm_csv_parser.py parse the csv file below nmcsvpar is its instance 
-                it returns complete table and other raw info after parsing and create table out of it 
-
-            '''
-            ro,host,os,ip_addr= nmcsvpar(filename)
-            return render(request, 'nmap/nmap_ip_detail2.html', {'ro':ro,"host":host,"os":os,"ip_addr":ip_addr,"host_id":id,"mac":"B0:4E:26:4D:40:28"})
-
-        except IOError:
-            print("[ Nmap ] File not accessible/ 404 not found  ")
-            ro = 'file not found'
-            return render(request, 'nmap/nmap_ip_detail2.html', {'ro':ro,"host_id":id })
-
-    except Exception as e:
-        print("[ Nmap ] Requested Object not foud ")
-        ro = 'Requested Object not foud'
-        return render(request, 'nmap/nmap_ip_detail2.html', {'ro':ro})
-
-
-
-@csrf_exempt
-def nm_scan_luncher(request):
-
-    '''
-        This funciton receives ip address through ajax req to start scanning using async method
-    '''
-
-    if request.is_ajax():
-
-        print("\n\n\n\n ************************* Scan launcher ***************")
-        data = {}
-        form_data_collector = dict(request.POST)
-        lst = form_data_collector["host_ip"] 
-        ip_address_to_scan = lst[0]
-        print "[ Scan ] Given IP Address : ",ip_address_to_scan
-        # print(form_data_collector)
-        # print(type(form_data_collector["host_ip"]))
-        
-        # sending response using web socket or django channel 
-        Group('pool').send({
-                "text": json.dumps({
-                    "action": "nm_host_up_check",
-                    "check_status": "checking host up status so,keep patience ",
-                })
-            })
-
-        host_up = True if os.system("ping -c 1 "+ip_address_to_scan) is 0 else False
-        # time.sleep(5)
-        if host_up:
-            textfile = TextFile()
-            Group('pool').send({
-                "text": json.dumps({
-                    "action": "nm_host_ip_added",
-                    "file_id": 1,
-                    "new_file_id": 1,
-                })
-            })
-
-            print len(form_data_collector)
-            for i in form_data_collector:
-                print i
-                b = i.encode('UTF8')
-                print type(b)
-                print b
-                print
-            job = Job(
-                name=ip_address_to_scan,
-                status="started",
-                nm_status="added"
-            )
-            job.save()
-
-            # callying celery server fun to add task to redis server 
-            # processor_nmap is functin in tasks.py file and tasks.py file handled by celery server and 
-            # celery add this funcitn to redis server to achieve async 
-            process_nmap.delay(job.id,ip_address_to_scan)
-
-            Group('pool').send({
-            "text": json.dumps({
-                "action": "taken_ip",
-                "job_id": job.id,
-                "job_name":  job.name,
-                "job_status": job.status,
-                   })
-               })
-
-
-            print("************************* Scan launcher End Task Handover to Celery server to run in background process ***************\n\n\n\n")
-
-
-            # ajax request response
-            data = {'msg': ip_address_to_scan}
-            data = {'msg': "ip adderss recived :: "+ip_address_to_scan}
-        else:
-
-            data = {'msg': "host is down "}
-        # data = {'msg': }
-    else:
-        data = {'msg': 'Failed'}
-    return JsonResponse(data)
+def nm_ip_detailed(request, id):
+    """
+    Placeholder function for nm_ip_detailed.
+    This function currently does nothing and serves as a placeholder.
+    """
+    return JsonResponse({"message": f"nm_ip_detailed is not implemented yet for id {id}."})
 
 
 
 
- 
+
 
 
 

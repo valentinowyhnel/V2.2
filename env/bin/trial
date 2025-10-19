@@ -1,22 +1,7 @@
-#!/root/Music/finlazation/env/bin/python
-# Copyright (c) Twisted Matrix Laboratories.
-# See LICENSE for details.
-import os, sys
-
-try:
-    import _preamble
-except ImportError:
-    try:
-        sys.exc_clear()
-    except AttributeError:
-        # exc_clear() (and the requirement for it) has been removed from Py3
-        pass
-
-# begin chdir armor
-sys.path[:] = map(os.path.abspath, sys.path)
-# end chdir armor
-
-sys.path.insert(0, os.path.abspath(os.getcwd()))
-
+#!/workspaces/V2.2/env/bin/python3
+import sys
 from twisted.scripts.trial import run
-run()
+if __name__ == '__main__':
+    if sys.argv[0].endswith('.exe'):
+        sys.argv[0] = sys.argv[0][:-4]
+    sys.exit(run())

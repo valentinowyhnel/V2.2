@@ -1,5 +1,11 @@
+# time
 import time
-from metasploit.msfrpc import MsfRpcClient
+try:
+    # Utiliser msfrpc comme alternative à pymetasploit3
+    from metasploit.msfrpc import MsfRpcClient
+except ImportError:
+    print("[Error] msfrpc non disponible. Veuillez installer la bibliothèque msfrpc.")
+    MsfRpcClient = None
 # from channels import Group
 import datetime
 import json
@@ -10,48 +16,48 @@ import subprocess
 def session_interaction_handler(session_id,cmd):
 
     print("*****************************backend session check  process")
+    if MsfRpcClient is None:
+        print('MsfRpcClient not available: please install pymetasploit3 or ensure metasploit package is on PYTHONPATH')
+        return
     try:
-        client = MsfRpcClient("123",server="127.0.0.1",ssl=False)
-        print ("********************** rpc connected ")
+        client = MsfRpcClient("123", host="127.0.0.1", port=55553, ssl=False)
+        print("********************** rpc connected ")
     except Exception as e:
-          print  e 
-            # Group('pool').send({
-            #     "text": json.dumps({
-            #         "action":"session_interact_"+session_id, 
-            #         "session_interact_response": "\n Metasploit connection Error, ",
-            #     })
-            # })
+        print(e)
+        # Group('pool').send({
+        #     "text": json.dumps({
+        #         "action":"session_interact_"+session_id, 
+        #         "session_interact_response": "\n Metasploit connection Error, ",
+        #     })
+        # })
     else:
         if bool(client.sessions.list):
 
-            print (type(client.sessions.list))
-            print (client.sessions.list.keys())
+            print(type(client.sessions.list))
+            print(list(client.sessions.list.keys()))
             print(bool(client.sessions.list))
             session_id = int(session_id)
-            # session_id = 5 - 1
-            # session_idd = client.sessions.list.keys()
             shell = client.sessions.session(session_id)
-            print shell
+            print(shell)
             print("\n\n")
             cond = True
             try:
-                while cond == True :
-                    inn = raw_input("shell_by_CH >  ")
+                while cond:
+                    inn = input("shell_by_CH > ")
                     if inn == "exit":
-                        exit()
-                    shell.write(inn+'\n')
-                    print shell.read()
-                    
+                        break
+                    shell.write(inn + '\n')
+                    print(shell.read())
             except Exception as e:
-                    client = MsfRpcClient("123",server="127.0.0.1",ssl=False)
-                    print e
+                client = MsfRpcClient("123", host="127.0.0.1", port=55553, ssl=False)
+                print(e)
             finally:
-                while cond == True :
-                    inn = raw_input("shell_by_CH >  ")
+                while cond:
+                    inn = input("shell_by_CH > ")
                     if inn == "exit":
-                        exit()
-                    shell.write(inn+'\n')
-                    print shell.read()
+                        break
+                    shell.write(inn + '\n')
+                    print(shell.read())
 
 
 # session_interaction_handler("5","ls")

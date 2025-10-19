@@ -1,15 +1,7 @@
-#!/root/Music/finlazation/env/bin/python
-# Copyright (c) Twisted Matrix Laboratories.
-# See LICENSE for details.
-
-import sys, os
-extra = os.path.dirname(os.path.dirname(sys.argv[0]))
-sys.path.insert(0, extra)
-try:
-    import _preamble
-except ImportError:
-    sys.exc_clear()
-sys.path.remove(extra)
-
+#!/workspaces/V2.2/env/bin/python3
+import sys
 from twisted.conch.scripts.conch import run
-run()
+if __name__ == '__main__':
+    if sys.argv[0].endswith('.exe'):
+        sys.argv[0] = sys.argv[0][:-4]
+    sys.exit(run())

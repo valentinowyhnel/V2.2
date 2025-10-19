@@ -1,87 +1,63 @@
 import csv
 
+
 def nmcsvpar(fname):
-	file = fname
-	ip   = ""
-	ip_addr   = ""
-	host   = ""
-	os   = ""
-	keys = ""
-	os   = ""
-	proto = []
-	port  = []
-	serv  = []
-	serv_ver = []
-	prod     = []
-	resul = {}
-	ser_fp =[]
-	with open(file) as fh:
-	    rd = csv.DictReader(fh, delimiter=',')
-	    l = 0
-	    for row in rd:
-			# print(row)
-			print
-			if l == 0:
-				keys= row.keys()
-				os  = row["os"]
-				ip_addr  = row["IP"]
-				host  = row["Host"]
-				l = 2
-			
-			if row['IP'] == ip_addr:
-				proto.append(row['Proto'])
-				port.append(row['Port'])
-				serv.append(row['Service'])
-				serv_ver.append(row['Service_version'])
-				prod.append(row['Product'])
-				ser_fp.append(row['Service FP'])
+    file = fname
+    ip_addr = ""
+    host = ""
+    osname = ""
+    proto = []
+    port = []
+    serv = []
+    serv_ver = []
+    prod = []
+    ser_fp = []
+    resul = {}
 
-				# for k,v in row.items():
-		# NSE Script ID		# 	print k,":",v
-				# print("&********************")
-	resul["host"] 	= host
-	resul["os"]		 = os
-	resul["proto"] 	 = proto
-	resul["port"] 		= port
-	resul["serv"] 		= serv
-	resul["serv_ver"]  = serv_ver
-	resul["prod"] 		= prod
-	resul["ser_fp"] 		= ser_fp
+    with open(file, encoding='utf-8') as fh:
+        rd = csv.DictReader(fh, delimiter=',')
+        first = True
+        for row in rd:
+            if first:
+                # capture header-derived initial values
+                keys = list(row.keys())
+                osname = row.get("os", "")
+                ip_addr = row.get("IP", "")
+                host = row.get("Host", "")
+                first = False
 
-	# print keys
+            if row.get('IP') == ip_addr:
+                proto.append(row.get('Proto', ''))
+                port.append(row.get('Port', ''))
+                serv.append(row.get('Service', ''))
+                serv_ver.append(row.get('Service_version', ''))
+                prod.append(row.get('Product', ''))
+                ser_fp.append(row.get('Service FP', ''))
 
-	print host
-	print os
-	print ip_addr
+    resul["host"] = host
+    resul["os"] = osname
+    resul["proto"] = proto
+    resul["port"] = port
+    resul["serv"] = serv
+    resul["serv_ver"] = serv_ver
+    resul["prod"] = prod
+    resul["ser_fp"] = ser_fp
 
-	# print proto
-	# print port
-	# print serv
-	# print serv_ver
-	# print prod
-	# print resul["port"][0]
+    row_html = build_html_row(resul)
+    return row_html, host, osname, ip_addr
 
 
-
-# 	print(resul["host"])
-	a = len(resul["proto"])
-	l = 0
-	row = ""
-	for i in range(a):
-		row = row+"<tr>"
-		pro   = "<td>"+ resul["proto"][i]+"</td>"
-		po   = "<td>"+ resul["port"][i]+"</td>"
-		se   = "<td>"+ resul["serv"][i]+"</td>"
-		se_v   = "<td>"+ resul["serv_ver"][i]+"</td>"
-		prd   = "<td>"+ resul["prod"][i]+"</td>"
-		# ser_fp   = "<td>"+ resul["ser_fp"][i]+"</td>"
-		row = row+po+pro+se+se_v+prd+"</tr>"
-
-		# print resul["proto"][0]
-	print(row)
-
-
-	return row,host,os,ip_addr
-
-# s()
+# Build HTML row
+def build_html_row(resul):
+    a = len(resul["proto"])
+    row_html = ""
+    for i in range(a):
+        row_html += "<tr>"
+        pro = f"<td>{resul['proto'][i]}</td>"
+        po = f"<td>{resul['port'][i]}</td>"
+        se = f"<td>{resul['serv'][i]}</td>"
+        se_v = f"<td>{resul['serv_ver'][i]}</td>"
+        prd = f"<td>{resul['prod'][i]}</td>"
+        row_html += po + pro + se + se_v + prd + "</tr>"
+    return row_html
 
