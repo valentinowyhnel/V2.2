@@ -8,13 +8,15 @@ Automat==20.2.0
 billiard==3.3.0.23
 celery==3.1.23
 certifi==2022.12.7
+celery==5.2.2
+certifi==2019.11.28
 cffi==1.14.5
 channels==0.17.0
 constantly==15.1.0
 cryptography==3.3.2
 daphne==0.14.2
 dbus-python==1.2.16
-Django==1.9.8
+Django==2.2.24
 enum34==1.1.10
 gunicorn==19.7.1
 hyperlink==21.0.0
@@ -46,6 +48,6 @@ six==1.10.0
 Twisted==16.2.0
 txaio==2.5.1
 typing==3.10.0.0
-urllib3==1.25.6
+urllib3==1.26.5
 webencodings==0.5.1
 zope.interface==4.2.0
