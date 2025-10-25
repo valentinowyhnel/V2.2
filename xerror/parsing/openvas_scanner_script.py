@@ -211,8 +211,15 @@ def opv_scan_hacker( opv_id , opv_ip ):
 
 	global opv_job_id 
 	global opv_ip_addr 
-	
-	opv_ip = opv_ip.encode('UTF8')
+
+	# ensure opv_ip is a native string (avoid bytes)
+	if isinstance(opv_ip, bytes):
+		try:
+			opv_ip = opv_ip.decode('utf-8')
+		except Exception:
+			opv_ip = str(opv_ip)
+	else:
+		opv_ip = str(opv_ip)
 
 	opv_job_id 	= opv_id
 	opv_ip_addr = opv_ip

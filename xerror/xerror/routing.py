@@ -1,11 +1,10 @@
-from channels import route
-from parsing import consumers
+from django.urls import re_path
+from parsing.consumers import PoolConsumer
 
-# Channel routing
+# WebSocket URL routing for Channels v3+ (ASGI). Maps websocket paths to
+# the consumer class. Other legacy routing was removed in favor of URLRouter.
 
-
-channel_routing = [
-    route("websocket.connect", consumers.ws_connect),
-    route("websocket.disconnect", consumers.ws_disconnect),
-    route("websocket.recieve", consumers.ws_recieve)
+websocket_urlpatterns = [
+    # connect clients to the pool consumer at ws/pool/
+    re_path(r"ws/pool/?$", PoolConsumer.as_asgi()),
 ]

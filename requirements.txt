@@ -1,44 +1,21 @@
-amqp==5.0.6
-asgi-redis==0.14.0
-asgiref==3.3.2
-attrs==21.2.0
-autobahn==23.1.2
-Automat==20.2.0
-billiard==3.6.4.0
-celery==5.2.2
-certifi==2025.10.5
-constantly==15.1.0
-cryptography==41.0.4
-daphne==0.14.2
-dbus-python==1.2.16
+# Minimal curated requirements for this Django project (dev)
+
 Django==3.2.21
-gunicorn==20.1.0
-hyperlink==21.0.0
-idna==3.4
-incremental==21.3.0
-ipaddress==1.0.23
-kombu==5.2.2
-lxml==4.9.3
-msgpack-python==0.4.7
-olefile==0.46
-openvas-lib==1.1.4
-pdfkit==1.0.0
-Pillow==10.0.0
-pyasn1==0.4.8
-pyasn1-modules==0.2.8
-pycairo==1.16.2
-pycparser==2.20
-PyHamcrest==1.10.1
-pylibemu==0.3.3
-pyOpenSSL==20.0.1
-PyPDF2==3.0.1
-pytz==2016.6.1
+python-decouple==3.8
+channels==3.0.4
+daphne==3.0.2
+celery==5.2.2
 redis==4.5.5
-reportlab==4.0.0
-service-identity==21.1.0
-six==1.10.0
-Twisted==22.10.0
-txaio==2.5.1
-urllib3==2.5.0
-webencodings==0.5.1
-zope.interface==4.2.0
+python-nmap==0.7.1
+pymetasploit3==1.0.6
+PyPDF2==3.0.1
+pdfkit==1.0.0
+requests==2.25.1
+lxml==4.9.2
+python-dateutil==2.8.1
+
+# Add openvas_lib only if you intend to use OpenVAS integration
+# openvas_lib==1.1.4
+
+# If you need extras for building some packages, install these system deps:
+# sudo apt update && sudo apt install -y nmap build-essential python3-dev libssl-dev libffi-dev libxml2-dev libxslt1-dev pkg-config

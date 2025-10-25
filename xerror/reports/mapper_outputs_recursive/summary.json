@@ -1,0 +1,22 @@
+{
+  "test_output.csv": {
+    "out_json": "/home/kaisen/V2.2/xerror/reports/mapper_outputs_recursive/test_output.json",
+    "rows": 0,
+    "diagnostics": {
+      "detected_cves": [],
+      "matched_with_msf": []
+    }
+  },
+  "csv_120_192.168.0.1.csv": {
+    "out_json": "/home/kaisen/V2.2/xerror/reports/mapper_outputs_recursive/csv_120_192.168.0.1.json",
+    "rows": 0,
+    "diagnostics": {
+      "detected_cves": [],
+      "matched_with_msf": []
+    }
+  },
+  "openvas/opv_124_172.16.217.131/csv/172.16.217.131.csv": {
+    "out_json": "/home/kaisen/V2.2/xerror/reports/mapper_outputs_recursive/172.16.217.131.json",
+    "rows": 1
+  }
+}

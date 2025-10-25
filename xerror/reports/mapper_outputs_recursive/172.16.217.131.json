@@ -1,0 +1,16 @@
+{
+  "ip": "172.16.217.131",
+  "mappings": {
+    "CVE-2008-4114": [
+      "CVE-2008-4114",
+      "445",
+      "tcp",
+      "High",
+      "auxiliary/dos/windows/smb/ms09_001_write",
+      "Vulnerabilities in SMB Could Allow Remote Code Execution (958687) - Remote",
+      "This host is missing a critical security update according to\n  Microsoft Bulletin MS09-001.",
+      "Successful exploitation could allow remote unauthenticated attackers\n  to cause denying the service by sending a specially crafted network message\n  to a system running the server service.",
+      "The vendor has released updates. Please see the references for more information."
+    ]
+  }
+}

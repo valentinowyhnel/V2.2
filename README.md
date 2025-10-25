@@ -54,80 +54,203 @@ Xerror build on python2 as a primary language and Django2 as web framework along
 <b>Contact :</b> exploitmee@protonmail.com
 
 # Guide d'installation et de configuration
+Ce fichier fournit une procédure reproducible pour installer et configurer Xerror en environnement de développement, ainsi que des notes pour la mise en production.
 
-Ce document décrit les étapes nécessaires pour installer et configurer le projet.
+### 1. Prérequis système
 
-## Prérequis
+- Système Linux (développé/testé sur Ubuntu/Debian)
+- Python 3.10+ (un `venv` dans le dépôt est utilisé ici)
+- pip
+- Redis (broker pour Celery)
+- nmap (outil en ligne de commande)
+- setcap (fourni par libcap) pour accorder des capacités réseau à nmap si vous voulez des scans SYN/OS sans exécuter en root
+- (optionnel) Metasploit + msfrpcd si vous comptez utiliser les modules d'exploitation
 
-- **Python 3.12** ou une version ultérieure
-- **Virtualenv** pour gérer les environnements virtuels
-- **Django** (inclus dans les dépendances du projet)
-- **pip** pour installer les dépendances
-- Accès à un serveur Metasploit (si nécessaire pour certaines fonctionnalités)
+Installez les paquets système recommandés :
 
-## Étapes d'installation
-
-### 1. Cloner le dépôt
 ```bash
-git clone https://github.com/valentinowyhnel/V2.2.git
-cd V2.2
+sudo apt update
+sudo apt install -y python3-venv python3-dev build-essential redis-server nmap libcap2-bin libxml2-dev libxslt1-dev pkg-config
 ```
 
-### 2. Créer un environnement virtuel
+Note : `libcap2-bin` fournit `setcap`.
+
+### 2. Préparer l'environnement Python
+
 ```bash
+cd /chemin/vers/V2.2
 python3 -m venv env
 source env/bin/activate
-```
-
-### 3. Installer les dépendances
-```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configurer les variables d'environnement
-Créer un fichier `.env` à la racine du projet et ajouter les variables suivantes :
+### 3. (Optionnel mais recommandé) Accorder des capacités à nmap
+
+Pour exécuter des scans SYN (-sS) et la détection d'OS (-O) sans lancer les services en root, donnez les capacités à l'exécutable `nmap` :
+
+```bash
+sudo setcap cap_net_raw,cap_net_admin+eip /usr/bin/nmap
+getcap /usr/bin/nmap  # vérifie que les capacités sont présentes
+```
+
+Si pour une raison quelconque vous préférez ne pas toucher aux capacités, la configuration de Xerror utilise par défaut des scans non privilégiés (`-sT`) ou bascule en mode degradé.
+
+### 4. Démarrer Redis
+
+Redis est utilisé comme broker Celery. Pour un environnement de développement local :
+
+```bash
+sudo systemctl enable --now redis-server
+sudo systemctl status redis-server
+```
+
+### 5. Configurer les variables d'environnement
+
+Créez un `.env` (ou exportez) selon vos besoins. Exemple minimal :
+
 ```env
 DJANGO_SETTINGS_MODULE=xerror.settings
 ```
 
-### 5. Appliquer les migrations
+Le projet lit `xerror/settings.py`. Pour d'autres secrets (DB, MSF credentials), utilisez votre méthode standard (dotenv, vault, etc.).
+
+### 6. Appliquer les migrations
+
 ```bash
-python manage.py migrate
+cd xerror
+../env/bin/python manage.py migrate
 ```
 
-### 6. Lancer le serveur de développement
+### 7. Lancer l'application et worker (développement)
+
+Lancer le serveur Django (accessible sur http://localhost:8000) :
+
 ```bash
-python manage.py runserver
+# depuis le répertoire racine du dépôt
+env/bin/python xerror/manage.py runserver 0.0.0.0:8000 > /tmp/xerror_runserver.log 2>&1 & echo $! > /tmp/xerror_runserver.pid
 ```
 
-Le projet sera accessible à l'adresse [http://127.0.0.1:8000](http://127.0.0.1:8000).
+Lancer Celery (depuis le répertoire `xerror` afin que `xerror.celery` soit importable) :
 
-## Dépendances principales
-
-- **Django** : Framework web principal
-- **python-decouple** : Gestion des variables d'environnement
-- **PyPDF2** : Génération de fichiers PDF
-- **nmap** : Analyse réseau
-- **celery** : Gestion des tâches asynchrones
-
-## Notes supplémentaires
-
-- Assurez-vous que le serveur Metasploit est configuré si vous utilisez des fonctionnalités liées à Metasploit.
-- Pour les environnements de production, configurez un serveur WSGI tel que Gunicorn et un serveur web comme Nginx.
-- Utilisez une base de données comme PostgreSQL pour la production (au lieu de SQLite).
-
-## Dépannage
-
-### Erreur : `ModuleNotFoundError: No module named 'decouple'`
-Assurez-vous que le module `python-decouple` est installé dans votre environnement virtuel :
 ```bash
-pip install python-decouple
+cd xerror
+../env/bin/celery -A xerror.celery worker --loglevel=info --concurrency=1 -n worker1@%h > /tmp/celery_worker.log 2>&1 & echo $! > /tmp/celery_worker.pid
 ```
 
-### Erreur : `AttributeError` ou `ImportError`
-Vérifiez que toutes les dépendances sont correctement installées et que les migrations ont été appliquées.
+Vérifiez les logs :
 
-### Erreur : `msfrpc non disponible`
-Installez le client Metasploit ou configurez un serveur Metasploit accessible.
+```bash
+tail -f /tmp/xerror_runserver.log
+tail -f /tmp/celery_worker.log
+```
 
-Pour toute autre question, consultez la documentation ou ouvrez une issue sur le dépôt GitHub.
+### 8. Lancer msfrpcd (optionnel, pour Metasploit RPC)
+
+Si vous utilisez les fonctionnalités d'exploitation, démarrez un service Metasploit RPC sécurisé :
+
+```bash
+# installer Metasploit via votre méthode (distribution/installer officiel)
+# puis lancer (exemple) :
+sudo msfrpcd -P <mot_de_passe_rpc> -S -U msf -a 127.0.0.1 -p 55553
+```
+
+Ensuite configurez les mêmes identifiants dans l'UI xerror ou via les modèles `MSF_rpc_connection`.
+
+### 9. Emplacement des rapports et logs
+
+- Rapports XML/CSV : `xerror/reports/` (nmap écrit `nm_<id>_<host>.xml` et le parser crée `csv_<id>_<host>.csv`)
+- Logs : `/tmp/xerror_runserver.log` et `/tmp/celery_worker.log`
+
+Si vous lancez des tâches en root (par ex. pour des scans complets), les fichiers créés peuvent avoir `root:root` pour propriétaire — changez la propriété si nécessaire :
+
+```bash
+sudo chown $(whoami):$(whoami) xerror/reports/*
+```
+
+### 10. Profils Nmap recommandés
+
+Le code supporte plusieurs profils ; modifiez `parsing/tasks.py` pour changer le profil par défaut ou ajouter une option UI :
+
+- `dev/fast` : `-T4 -sT -sV -Pn --max-retries 1 --host-timeout 30s` (rapide, sans privilèges)
+- `full` : `-T4 -sS -sV -O -A -p- -Pn` (complet, nécessite capacités ou privilèges root)
+
+### 11. Automatisation / production
+
+Pour un déploiement durable, créez des unités systemd :
+
+Example systemd unit for Celery (save as `/etc/systemd/system/xerror-celery.service`):
+
+```ini
+[Unit]
+Description=Xerror Celery Worker
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/path/to/V2.2/xerror
+Environment=PATH=/path/to/V2.2/env/bin
+ExecStart=/path/to/V2.2/env/bin/celery -A xerror.celery worker --loglevel=info --concurrency=4 -n worker1@%h
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Example systemd unit for a privileged scan helper (optional):
+
+```ini
+[Unit]
+Description=Xerror privileged scan helper
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/path/to/V2.2/xerror
+ExecStart=/usr/bin/python3 /path/to/V2.2/xerror/scan_helper.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 12. Dépannage rapide
+
+- Si Celery ne se connecte pas à Redis : vérifiez `redis-server` et l'URL `REDIS_URL` (par défaut `redis://localhost:6379/0`).
+- Si `nmap` se plaint de privilèges : appliquez `setcap` ou lancez le scan via un service contrôlé.
+- Si `msfrpc` est introuvable : installez la bibliothèque Python attendue (ex : `pymetasploit3`) et/ou démarrez `msfrpcd`.
+
+### 13. Récapitulatif rapide des commandes
+
+```bash
+# créer venv et installer
+python3 -m venv env
+source env/bin/activate
+pip install -r requirements.txt
+
+# donner capabilities à nmap (optionnel)
+sudo setcap cap_net_raw,cap_net_admin+eip /usr/bin/nmap
+
+# migrations
+cd xerror && ../env/bin/python manage.py migrate
+
+# runserver (background)
+../env/bin/python manage.py runserver 0.0.0.0:8000 > /tmp/xerror_runserver.log 2>&1 & echo $! > /tmp/xerror_runserver.pid
+
+# celery (from xerror/)
+../env/bin/celery -A xerror.celery worker --loglevel=info --concurrency=1 -n worker1@%h > /tmp/celery_worker.log 2>&1 & echo $! > /tmp/celery_worker.pid
+
+# démarrer msfrpcd (optionnel)
+sudo msfrpcd -P <password> -S -U msf -a 127.0.0.1 -p 55553
+```
+
+Si vous voulez, je peux :
+- ajouter un `scan_helper.py` et un unit file prêt à l'emploi pour exécuter les scans privilégiés de façon contrôlée,
+- ou modifier `parsing/tasks.py` pour détecter automatiquement les capacités de `nmap` et basculer sur un profil non privilégié.
+
+-----
+
+Contact: exploitmee@protonmail.com
+

@@ -15,7 +15,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'xerror.parsing',
+    'parsing',
 ]
 
 MIDDLEWARE = [
@@ -84,3 +84,8 @@ STATIC_URL = '/static/'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Use BigAutoField by default to silence Django model warnings about
+# auto-created primary keys when upgrading to recent Django versions.
+# This is safe for existing SQLite DBs and recommended for new projects.
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

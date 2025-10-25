@@ -121,7 +121,14 @@ def upload(request):
             }
         )
         
-        process_file.delay(textfile.id)
+        try:
+            process_file.delay(textfile.id)
+        except Exception as e:
+            print(f"[task] process_file.delay failed: {e}. Running synchronously.")
+            try:
+                process_file.run(textfile.id)
+            except Exception as e2:
+                print(f"[task] process_file.run also failed: {e2}")
         data = {'msg': 'Success'}
     else:
         data = {'msg': 'Failed'}
@@ -241,127 +248,85 @@ def scn_parser_report(id,ip):
 
 
 
-def report_view(request,id):
-    scn_err = ""
-    vul_err = ""
-    exp_err = ""
-    scn_data = ""
+def report_view(request, id):
+    """Display report summary for a Job (scanning + vuln results + mapped exploits).
 
-    vul_data = ""
+    This simplified implementation tries to gather existing scan and vuln
+    parsing results using helper functions and renders the report view.
+    """
     try:
-        print("\n\n\n\n [ report ] report request recived ")
         job = Job.objects.get(pk=id)
+    except Job.DoesNotExist:
+        return render(request, 'report/report_view.html', {'ro': 'Requested Object not found'})
 
-        try:
-            csvname = "csv_"+id+"_"+job.name+".csv"
-            filename = BASE_DIR + '/reports/' + csvname
-            with open(filename) as f:
-                pass 
-
-            ro,host,os,ip_addr= nmcsvpar(filename)
-            # print ro
-            scn_data  = ro
-            print("[ report ] scanning file found  ")
-            # return render(request, 'openvas/openvas_ip_detail.html', {'ro':resul_table,"ip_addr":ip, 'host_id': id.encode("UTF8")})
-            # return render(request, 'report/report_view.html', {'v_scn':resul_table,'vul_status':vul_status,'ro':ro,"host":host,"os":os,"ip_addr":ip_addr,"host_id":id,"mac":"B0:4E:26:4D:40:28"})
-
-        except IOError:
-            print("[ Nmap ] scan File not accessible/ 404 not found  ")
-            # ro = 'file not found'
-            # return render(request, 'report/report_view.html', {'ro':ro,"host_id":id })
-        finally:
-            try:
-                opv_csv_file_name = BASE_DIR + '/reports/openvas/opv_'+id+"_"+job.name+"/csv/"+job.name+".csv"
-                with open(opv_csv_file_name) as f:
-                    pass 
-                print(" [ report ] Opv ip address found  ")
-                obj = openvas_csv_parse_detail(opv_csv_file_name)
-                resul_table,ip   = obj.opv_resul_table() 
-                print("*******************88 opv table")
-                # print resul_table
-                vul_status = False
-                if resul_table:
-                    vul_status = True
-
-# session part
-                session_tractor = False
-                try:
-                    pass
-                    resul_dict = {}
-                    host_ipd = ''
-                    host_idd ='' 
-                    cve = ""
-                    session = Exploiated_system.objects.filter(host_id=id)
-                    host_ipd,host_idd,cve,temp_dict = session_exptractor(session)
-                    temp_ = "none"
-                    if cve != '':
-                        temp_ = 'exist'
-                        session_tractor  = True
-                    # resul_dict = {"ip_addr":host_ipd, "flag":temp_, }
-                except Exception as e:
-                    session_tractor  = True
-
-# end session sectoin 
-
-#  exploit secion 
-                exploit_mapped = exploit_mapper_report(job.name,job.id)
-# exploit end
-
-                if scn_data:
-                    return render(request, 'report/report_view.html', {"mapped":exploit_mapped,"session_tractor":session_tractor,"sessions":  temp_dict,'resul_table':resul_table,'ro':scn_data,"host":host,"os":os,"ip_addr":ip_addr,"host_id":id.encode("UTF8"),"mac":"B0:4E:26:4D:40:28"})
-                else:
-                    return render(request, 'report/report_view.html', {"mapped":exploit_mapped,"session_tractor":session_tractor,"sessions":  temp_dict,'resul_table':resul_table,"host_id":id.encode("UTF8"),"mac":"B0:4E:26:4D:40:28"})
-            except IOError:
-                vul_err = 'file not found'
-                print("opv file error ")
-                return render(request, 'report/report_view.html', {'vul_err':vul_err,'ro':scn_data,"host":host,"os":os,"ip_addr":ip_addr,"host_id":id.encode("UTF8"),"mac":"B0:4E:26:4D:40:28"})
-
-
-
-    except Exception as e:
-        print("[ report ] Requested Object not foud ")
-        obj_err = 'Requested Object not foud'
-        return render(request, 'report/report_view.html', {'ro':obj_err})
-
-
-
-
-
-
-def report_download(request,id):
+    # scanning (nmap csv) parsing
+    scn_data = None
     try:
+        scn_res = scn_parser_report(job.id, job.name)
+        if scn_res:
+            scn_data = scn_res
+    except Exception:
+        scn_data = None
 
-        job  = Job.objects.get(pk=id)
+    # vulnerability (openvas) parsing
+    resul_table = None
+    try:
+        resul_table = vscn_parser_reort(job.id, job.name)
+    except Exception:
+        resul_table = None
+
+    # session extraction
+    session_tractor = False
+    temp_dict = {}
+    try:
+        session = Exploiated_system.objects.filter(host_id=id)
+        host_ipd, host_idd, cve, temp_dict = session_exptractor(session)
+        if cve:
+            session_tractor = True
+    except Exception:
+        session_tractor = False
+
+    # exploit mapping
+    exploit_mapped = exploit_mapper_report(job.name, job.id)
+
+    return render(request, 'report/report_view.html', {
+        "mapped": exploit_mapped,
+        "session_tractor": session_tractor,
+        "sessions": temp_dict,
+        'resul_table': resul_table,
+        'ro': scn_data,
+        "host": job.name,
+        "os": "",
+        "ip_addr": job.name,
+        "host_id": str(id),
+        "mac": "B0:4E:26:4D:40:28",
+    })
+
+
+def report_download(request, id):
+    """Return a merged PDF of the landing page + the OpenVAS PDF result for a job.
+    This is a simplified implementation that attempts to merge two PDFs and return
+    the resulting file as a FileResponse.
+    """
+    try:
+        job = Job.objects.get(pk=id)
         host_id = job.id
-        ip= job.name
+        ip = job.name
 
-        result_dir =BASE_DIR + '/reports/openvas/' +"opv_"+str(host_id)+"_"+ip+"/pdf/"+ip+".pdf"
-        base_page  = BASE_DIR + '/templates/report/landing_page.pdf'
-        destination  = BASE_DIR + '/templates/report/generic_report.pdf'
-
-        with open(result_dir) as f:
-            pass
-
-        pdfs = [base_page, result_dir]
+        result_dir = BASE_DIR + '/reports/openvas/opv_' + str(host_id) + '_' + ip + '/pdf/' + ip + '.pdf'
+        base_page = BASE_DIR + '/templates/report/landing_page.pdf'
+        destination = BASE_DIR + '/templates/report/generic_report.pdf'
 
         merger = PdfFileMerger()
-
-        for pdf in pdfs:
+        for pdf in [base_page, result_dir]:
             merger.append(pdf)
-
         merger.write(destination)
         merger.close()
-        resul = BASE_DIR + '/templates/report/generic_report.pdf'
-        print(resul)
-        try:
-            return FileResponse(open(resul , 'rb'), content_type='application/pdf')
-        except :
-            raise Http404()
 
-    except Exception as e:
+        return FileResponse(open(destination, 'rb'), content_type='application/pdf')
+    except Exception:
         obj_err = "Requested Object Not found"
-        return render(request, 'report/report_err.html', {'repo_err':obj_err})
-        # return render(request, 'report/report_view.html', {'ro':obj_err})
+        return render(request, 'report/report_err.html', {'repo_err': obj_err})
 
 
 
@@ -492,7 +457,14 @@ def msf_session_intract_ajx(request):
         print(type(cmd))
         print(form_data_collector)
         print((type(form_data_collector["rhost_cmd"])))
-        process_session_interact.delay(session_id,cmd)
+        try:
+            process_session_interact.delay(session_id,cmd)
+        except Exception as e:
+            print(f"[task] process_session_interact.delay failed: {e}. Running synchronously.")
+            try:
+                process_session_interact.run(session_id,cmd)
+            except Exception as e2:
+                print(f"[task] process_session_interact.run also failed: {e2}")
 
 
         # Envoi du message via les Channel Layers
@@ -697,7 +669,14 @@ def msf_session_status_check_ajax(request):
         expl_uuid    = id_lst[2]
 
         print(" [ SESSION ] sending SESSION STATUS CHEECK req to background process ")
-        process_session_check.delay(session_id,host_id,expl_uuid)
+        try:
+            process_session_check.delay(session_id,host_id,expl_uuid)
+        except Exception as e:
+            print(f"[task] process_session_check.delay failed: {e}. Running synchronously.")
+            try:
+                process_session_check.run(session_id,host_id,expl_uuid)
+            except Exception as e2:
+                print(f"[task] process_session_check.run also failed: {e2}")
         print(session_id)
         print(host_id)
         print(expl_uuid)
@@ -900,7 +879,8 @@ def exploit_form_data_extractor(form_data_collector):
             exploit_data= ''
 
             for k,v in  list(form_data_collector.items()):
-                exploit_data  = k.encode('UTF8')
+                # keys from request.POST are already strings in Django/Python3
+                exploit_data  = str(k)
 
             exploit_data = exploit_data.replace('[',"")
             exploit_data = exploit_data.replace(']',"")
@@ -964,8 +944,9 @@ def msf_exploit_config_ajx(request):
         if exploit_detail_dict  != "conneciton_sucks":
 
             job          = Job.objects.get(pk=exploit_form_data["host_id"])
-            rhost_ip      = job.name 
-            rhost_ip       = rhost_ip.encode("UTF8")
+            rhost_ip      = job.name
+            # ensure we keep a native str type for RHOST
+            rhost_ip       = str(rhost_ip)
 
             archi       =exploit_detail_dict['archi']   
             authors     =exploit_detail_dict['authors']  
@@ -1092,7 +1073,14 @@ def msf_exploit_vulnerability(request):
 
                     print("[ Exploit ] All set handovering Exploitation process to background procss ")
                     # process_exploitation fun is backgroud celery server function to handle exploit process, it take time to exploit RHOST
-                    process_exploitation.delay(config_setting_id,host_id)
+                    try:
+                        process_exploitation.delay(config_setting_id,host_id)
+                    except Exception as e:
+                        print(f"[task] process_exploitation.delay failed: {e}. Running synchronously.")
+                        try:
+                            process_exploitation.run(config_setting_id,host_id)
+                        except Exception as e2:
+                            print(f"[task] process_exploitation.run also failed: {e2}")
                     job.exploit_lock = "acquired"
                     job.save()
 
@@ -1227,70 +1215,19 @@ def openvas_ip_detailed(request,id):
 
 @csrf_exempt
 def openvas_nmap2scan_luncher(request):
-    '''
-        This function used to async ip that scanned previously and now we want to run same 
-        ip for vulnerability scan 
-    '''
-
-    data = {'msg': 'ajax Failed'}
-    if request.is_ajax():
-
-        print("[ nm2opv] ajax requeseted recived")
-
-        print(request.POST)
-        requestIP_dict =  dict(request.POST)
-        # we get dict and have only id address but its in the form of key in dict so we iterate because it has only one key with black valye
-        requestIP_key=  next(iter(requestIP_dict)).encode('UTF8')
-
-        print(type(requestIP_key))
-        async_to_sync(get_channel_layer().group_send)("pool", {
-                "type": "chat.message",
-                "action": "openvas_host_up_check",
-                "check_status": "openvas checking host up status so,keep patience ",
-            })
-        if Job.objects.get(pk=requestIP_key):
-            ip_detail = Job.objects.get(pk=requestIP_key) 
-            print("[ nm2opv] requested id object found")
-            print(ip_detail.status)
-            ip_detail.status = "started"
-            ip_detail.vul_status = "added"
-            ip_detail.save()
-            print("[ nm2opv] object status after alter")
-            print(ip_detail.status)
-            print("[ nm2opv] checking up status")
-            host_up = True if os.system("ping -c 1 "+ip_detail.name) is 0 else False
-            if host_up:
-                print(ip_detail.name)
-                print(ip_detail.id)
-                print(ip_detail.status)
-                ip = ip_detail.name
-                ip = ip.encode('UTF8')
-                # print("^^^^^^^^^^^^^^ ip ",type(ip))
-                process_ip_vul.delay(ip_detail.id,ip_detail.name)
-
-                async_to_sync(get_channel_layer().group_send)("pool", {
-                    "type": "chat.message",
-                    "action": "openvas_taken_ip",
-                    "job_id": ip_detail.id,
-                    "job_name":  ip_detail.name,
-                    "job_status": ip_detail.status,
-                       })
-                data = {'msg': "host ip recived "}
-        
-            else:
-                data = {'msg': "host is down "}
-        # data = {'msg': }
-    else:
-        data = {'msg': 'Failed'}
+    # This endpoint intentionally kept for backward compatibility.
+    # The real logic for starting an OpenVAS scan from a previous Nmap run
+    # is handled elsewhere; keep a thin wrapper that delegates or returns
+    # a helpful JSON message.
+    data = {'msg': 'Use the Vulnerability Scan page to launch an OpenVAS scan.'}
     return JsonResponse(data)
 
-    
 def opv_serverCon_chacker():
 
     try:
         urllib.request.urlopen('https://127.0.0.1:9392', timeout=1)
         return True
-    except urllib.error.URLError as err: 
+    except urllib.error.URLError:
         return False
 
 
@@ -1299,13 +1236,14 @@ def opv_serverCon_chacker():
 def openvas_scan_luncher(request):
 
     if request.is_ajax():
-        if opv_serverCon_chacker():
+        # If OpenVAS server is NOT reachable, abort early with a helpful message
+        if not opv_serverCon_chacker():
             async_to_sync(get_channel_layer().group_send)("pool", {
                 "type": "chat.message",
                 "action": "openvas_host_up_check",
                 "check_status": "openvas Server is down, Start the server ",
             })
-            data = {'msg': 'Err:openvas Server connection error'}
+            data = {'msg': 'Err: openvas Server connection error'}
             return JsonResponse(data)
 
 
@@ -1320,7 +1258,13 @@ def openvas_scan_luncher(request):
             pass
         else:
             ip_address_to_scan = form_data_collector["host_ip"][1]
-        ip_address_to_scan = ip_address_to_scan.encode('UTF8')
+        # keep ip as string (do not encode to bytes)
+        if isinstance(ip_address_to_scan, bytes):
+            try:
+                ip_address_to_scan = ip_address_to_scan.decode('utf-8')
+            except Exception:
+                ip_address_to_scan = str(ip_address_to_scan)
+        ip_address_to_scan = str(ip_address_to_scan).strip()
         # print "[+] **************Given IP Address : ",ip_address_to_scan
         print("[ v_scn ] **************Given IP Address : ",form_data_collector["host_ip"])
         print() 
@@ -1336,8 +1280,14 @@ def openvas_scan_luncher(request):
                 "check_status": "openvas checking host up status so,keep patience ",
             })
 
-        host_up = True if os.system("ping -c 1 "+ip_address_to_scan) is 0 else False
-        # time.sleep(5)
+        # Use subprocess for reliability instead of os.system
+        import subprocess
+        try:
+            ping = subprocess.run(["ping", "-c", "1", ip_address_to_scan], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            host_up = (ping.returncode == 0)
+        except Exception:
+            host_up = False
+
         if host_up:
   
 
@@ -1357,7 +1307,14 @@ def openvas_scan_luncher(request):
             )
             job.save()
 
-            process_ip_vul.delay(job.id,ip_address_to_scan)
+            try:
+                process_ip_vul.delay(job.id, ip_address_to_scan)
+            except Exception as e:
+                print(f"[task] process_ip_vul.delay failed: {e}. Running synchronously.")
+                try:
+                    process_ip_vul.run(job.id, ip_address_to_scan)
+                except Exception as e2:
+                    print(f"[task] process_ip_vul.run also failed: {e2}")
 
 
             async_to_sync(get_channel_layer().group_send)("pool", {
@@ -1372,8 +1329,7 @@ def openvas_scan_luncher(request):
             print("[ v_scn] ************************* Openvas Scan launcher Ender Hand over to background process ***************\n\n\n\n")
 
 
-            data = {'msg': ip_address_to_scan}
-            data = {'msg': "ip adderss recived :: "+ip_address_to_scan}
+            data = {'msg': "ip address received :: " + ip_address_to_scan}
         else:
 
             data = {'msg': "host is down "}
@@ -1382,12 +1338,100 @@ def openvas_scan_luncher(request):
         data = {'msg': 'Failed'}
     return JsonResponse(data)
 
+@csrf_exempt
 def nm_scan_index(request):
+    """Nmap scanning page and AJAX launcher.
+
+    - GET: render the `nmap/nmap_scan2.html` page with available Job rows.
+    - AJAX POST: accept either a `host_ip` field (from the scan form) or a
+      job id sent as the single POST key (legacy behavior). Create a Job if
+      needed and hand off to `process_nmap` Celery task. Notify channel
+      layer so the UI can update.
     """
-    Placeholder function for nm_scan_index.
-    This function currently does nothing and serves as a placeholder.
-    """
-    return JsonResponse({"message": "nm_scan_index is not implemented yet."})
+    if request.is_ajax():
+        data = {'msg': 'ajax Failed'}
+        form = dict(request.POST)
+
+        # Prefer explicit host_ip form field
+        if 'host_ip' in form:
+            try:
+                lst = form['host_ip']
+                ip_address_to_scan = lst[0] if isinstance(lst, (list, tuple)) else lst
+                if isinstance(ip_address_to_scan, bytes):
+                    ip_address_to_scan = ip_address_to_scan.decode('utf-8', errors='ignore')
+                ip_address_to_scan = str(ip_address_to_scan).strip()
+
+                job = Job(name=ip_address_to_scan, status='started', nm_status='added')
+                job.save()
+
+                try:
+                    process_nmap.delay(job.id, ip_address_to_scan)
+                except Exception as e:
+                    print(f"[task] process_nmap.delay failed: {e}. Running synchronously.")
+                    try:
+                        process_nmap.run(job.id, ip_address_to_scan)
+                    except Exception as e2:
+                        print(f"[task] process_nmap.run also failed: {e2}")
+
+                async_to_sync(get_channel_layer().group_send)('pool', {
+                    'type': 'chat.message',
+                    'action': 'nmap_taken_ip',
+                    'job_id': job.id,
+                    'job_name': job.name,
+                    'job_status': job.status,
+                })
+
+                data = {'msg': f'ip address received :: {ip_address_to_scan}'}
+            except Exception as e:
+                data = {'msg': f'error: {e}'}
+            return JsonResponse(data)
+
+        # Legacy: POST contains a single key that is the job id
+        try:
+            key = next(iter(form))
+            job_id = int(key)
+        except Exception:
+            return JsonResponse({'msg': 'Invalid request'})
+
+        try:
+            ip_detail = Job.objects.get(pk=job_id)
+        except Job.DoesNotExist:
+            return JsonResponse({'msg': 'Job not found'})
+
+        ip_detail.status = 'started'
+        ip_detail.nm_status = 'added'
+        ip_detail.save()
+
+        import subprocess
+        try:
+            ping = subprocess.run(['ping', '-c', '1', ip_detail.name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            host_up = (ping.returncode == 0)
+        except Exception:
+            host_up = False
+
+        if host_up:
+            try:
+                process_nmap.delay(ip_detail.id, ip_detail.name)
+            except Exception as e:
+                print(f"[task] process_nmap.delay failed: {e}. Running synchronously.")
+                try:
+                    process_nmap.run(ip_detail.id, ip_detail.name)
+                except Exception as e2:
+                    print(f"[task] process_nmap.run also failed: {e2}")
+            async_to_sync(get_channel_layer().group_send)('pool', {
+                'type': 'chat.message',
+                'action': 'nmap_taken_ip',
+                'job_id': ip_detail.id,
+                'job_name': ip_detail.name,
+                'job_status': ip_detail.status,
+            })
+            return JsonResponse({'msg': 'host ip received'})
+        else:
+            return JsonResponse({'msg': 'host is down'})
+
+    # non-ajax -> render page
+    job = Job.objects.all()
+    return render(request, 'nmap/nmap_scan2.html', {'job': job})
 
 def nm_ip_detailed(request, id):
     """

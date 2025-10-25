@@ -1,4 +1,4 @@
-#!/workspaces/V2.2/env/bin/python3
+#!/home/kaisen/V2.2/env/bin/python
 import sys
 from sqlparse.__main__ import main
 if __name__ == '__main__':

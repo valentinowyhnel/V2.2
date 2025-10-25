@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-{% load staticfiles %}
+{% load static %}
 <html lang="en">
 
 
@@ -50,14 +50,13 @@ background-image: url("{% static 'a.png' %}");
   /*color:white;*/
   background-repeat: no-repeat;
 background-position: center ;
-}
-
-
-#def{
-
 background-image: url("{% static 'b.jpeg' %}");
   
-}
+    });
+    </script>
+
+</body>
+</html>
 
 
 
@@ -79,7 +78,7 @@ background-image: url("{% static 'b.jpeg' %}");
             <nav class="">
 
                 <div class="top-navbar navbar navbar-header" style="background: #db9a1aeb;"><!-- ffb22b -->
-                    <a class="navbar-brand" href="index.html" style="margin-left:5px;">
+                    <a class="navbar-brand" href="{% url 'parsing:index' %}" style="margin-left:5px;">
                         <!-- Logo icon --><b>
                             <!--You can put here icon as well // <i class="wi wi-sunset"></i> //-->
                             <!-- Dark Logo icon -->
@@ -138,7 +137,7 @@ background-image: url("{% static 'b.jpeg' %}");
                         <li> <a class="has-arrow waves-effect waves-light" href="{% url 'parsing:nm_scan_index' %}" ><i   class="mdi mdi-account-search active"></i><span class="hide-menu" >Scanning </span></a>
                             
                         </li>
-                        <li> <a class="has-arrow waves-effect waves-light"  href="{% url 'parsing:openvas_scan_index'  %}" ><i  class="mdi mdi-barcode-scan"></i><span class="hide-menu">Vul Scanning</span></a>
+                        <li> <a class="has-arrow waves-effect waves-light"  href="{% url 'parsing:openvas_scan_index'  %}" ><i  class="mdi mdi-barcode-scan"></i><span class="hide-menu">Vulnerability Scanning</span></a>
                            
                         </li>
                         <li> <a class="has-arrow waves-effect waves-dark" href="#" aria-expanded="false"><i class="mdi mdi-biohazard"></i><span class="hide-menu">Exploitation</span></a>
@@ -174,9 +173,9 @@ background-image: url("{% static 'b.jpeg' %}");
 
             <!-- Bottom points-->
             <div class="sidebar-footer">
-                <!-- item--><a href="#" class="link" data-toggle="tooldtip" title="Settings"><i class="ti-settings"></i></a>
+                <!-- item--><a href="#" class="link" data-toggle="tooltip" title="Settings"><i class="ti-settings"></i></a>
 
-                <!-- item--><a href="#" class="link" data-toggle="tooltidp" title="Email"><i class="mdi mdi-gmail"></i></a>
+                <!-- item--><a href="#" class="link" data-toggle="tooltip" title="Email"><i class="mdi mdi-gmail"></i></a>
 
                 <!-- item--><a href="#" class="link" data-toggle="tooltip" title="Logout"><i class="mdi mdi-power"></i></a>
             </div>
@@ -510,24 +509,19 @@ $(document).ready(function(){
 
 
 
-    // When we're using HTTPS, use WSS too.
-    var ws_scheme = window.location.protocol == "https:" ? "wss" : "ws";
-    var ws_path = ws_scheme + '://' + window.location.host + '/pool/';
-    console.log("Connecting to " + ws_path)
-
-    var socket = new ReconnectingWebSocket(ws_path);
-    socket.onmessage = function(message) {
-      // Catch websocket messages
-        console.log("Got message: " + message.data);
-
-        var data = JSON.parse(message.data);
+    <script src="{% static 'js/ws_pool.js' %}"></script>
+    <script src="{% static 'js/ui_helpers.js' %}"></script>
+    <script>
+    // listen for dispatched websocket messages (shared connection)
+    document.addEventListener('xerror:wsmessage', function(ev){
+        var data = ev.detail;
+        // page-specific handling (keeps original logic)
         if (data.action == "openvas_taken_ip") {
             alert("taken_ipp")
-
-             var node = document.createElement("LI");
-              var textnode = document.createTextNode("System Recived IP ");
-              node.appendChild(textnode);
-              document.getElementById("notification_opv").appendChild(node);  
+            var node = document.createElement("LI");
+            var textnode = document.createTextNode("System Received IP ");
+            node.appendChild(textnode);
+            document.getElementById("notification_opv").appendChild(node);
 
             var openvas_task_status = $("#openvas_task_status");
             var ele = $('<tr></tr>');
@@ -546,58 +540,36 @@ $(document).ready(function(){
             item_status.append(span);
             ele.append(item_status);
             openvas_task_status.append(ele);
-        }//other file
-
-
+        }
         else if (data.action == "openvas_running_status"){
-          // Draw celery task progress
-            document.getElementById("openvas_resul_Terminal").value +=data.job_openvas_log
-
+            document.getElementById("openvas_resul_Terminal").value += data.job_openvas_log || '';
             $('#openvas_resul_Terminal').scrollTop($('#openvas_resul_Terminal')[0].scrollHeight);
-            
             var item = $('#status-' + data.job_id );
             item.attr("class", "badge badge-info");
             item.text(data.job_openvas_current_status);
-
         }
-
-
-
         else if (data.action == "completed_ip"){
-          // Draw celery task progress
             var item = $('#status-' + data.job_id );
             item.attr("class", "badge badge-success");
             item.text(data.job_status);
-
-            // var item = $('#process-' + data.file_id);
-            // item.text(data.progress + ' %');
         }
-
         else if (data.action == "openvas_host_up_check"){
             alert(data.check_status);
-             var node = document.createElement("LI");
-              var textnode = document.createTextNode(data.check_status);
-              node.appendChild(textnode);
-              document.getElementById("notification_opv").appendChild(node);  
-
+            var node = document.createElement("LI");
+            var textnode = document.createTextNode(data.check_status);
+            node.appendChild(textnode);
+            document.getElementById("notification_opv").appendChild(node);
         }
-
-
-
         else if (data.action == "processing"){
-          // Draw celery task progress
             var item = $('#process-' + data.file_id);
-            item.text(data.progress + ' %');
+            if (item.length) item.text(data.progress + ' %');
         }
-
         else if (data.action == "completed"){
-          // Draw celery task result
             var item = $('#result-' + data.file_id);
-            item.text(data.file_amount);
+            if (item.length) item.text(data.file_amount);
         }
-    };//end of onmessage
-
-});//end of main funciton  
+    });
+    </script>
 
 </script>
 

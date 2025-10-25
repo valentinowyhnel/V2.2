@@ -145,7 +145,33 @@ def process_nmap(job_id,ip_addr):
     print("[ NMAP  ] ************************* Nmap Background Process running **************")
     print(scnRepo)
 
-    for path in run("nmap -T4 -O -sV --stats-every .01 "+ip_addr+" -oX "+scnRepo):
+    # Revert to a more thorough nmap profile for full scans. This profile
+    # performs a SYN scan with service/version detection and OS detection,
+    # and scans all TCP ports. Note: SYN scans (-sS) and OS detection (-O)
+    # generally require root privileges or granting cap_net_raw/cap_net_admin
+    # to the nmap binary (e.g. `sudo setcap cap_net_raw,cap_net_admin+eip /usr/bin/nmap`).
+    #
+    # Flags used:
+    # -T4      : aggressive timing for faster but still reliable results
+    # -sS      : TCP SYN scan (stealthy, requires privileges)
+    # -sV      : service/version detection
+    # -O       : OS detection
+    # -A       : enable OS detection, version detection, script scanning and traceroute
+    # -p-      : scan all 65535 TCP ports (thorough but slower)
+    # -Pn      : skip host discovery (treat host as up)
+    # --stats-every 1s : print progress statistics every 1 second
+    #
+    # If you prefer to avoid privilege requirements, replace -sS with -sT
+    # and drop -O (or run nmap with the appropriate capabilities).
+    nmap_cmd = f"nmap -T4 -sS -sV -O -A -p- -Pn --stats-every 1s {ip_addr} -oX {scnRepo}"
+    for path in run(nmap_cmd):
+            # `run()` yields raw bytes from the subprocess stdout; decode to str
+            if isinstance(path, bytes):
+                try:
+                    path = path.decode('utf-8', errors='ignore')
+                except Exception:
+                    path = str(path)
+
             send_message_to_group('pool', {
                 "action": "not_completed",
                 "job_id": job_id,
@@ -158,8 +184,14 @@ def process_nmap(job_id,ip_addr):
 
 
     print("[NMAP ]  converting csv file  ")
-    name_csv = "csv_"+str(job_id)+"_"+str(job.name)+".csv"    
-    print("[ NMAP ]  "+nmxmlparser(name_xml,name_csv))
+    name_csv = "csv_"+str(job_id)+"_"+str(job.name)+".csv"
+    # nmxmlparser expects paths relative to BASE_DIR. The XML is written
+    # into the `reports/` subdirectory (scnRepo). Pass the 'reports/'
+    # prefix so the parser can find the file. Also write the CSV into
+    # the reports directory for consistency.
+    xml_rel = 'reports/' + name_xml
+    csv_rel = 'reports/' + name_csv
+    print("[ NMAP ]  "+nmxmlparser(xml_rel,csv_rel))
     print("[ NMAP ]  finshed Nmpa scanning ")
 
     # for i in range(1,10):

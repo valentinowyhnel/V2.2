@@ -38,13 +38,13 @@ INSTALLED_APPS = [
     'parsing'
 ]
 
-MIDDLEWARE_CLASSES = [
+MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
+    # SessionAuthenticationMiddleware removed in Django 2.x+, not needed
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -132,15 +132,18 @@ STATICRPORTS_DIRS = [
 
 
 # Channels settings
+# Use the in-memory channel layer for development by default. This avoids
+# introducing an external Redis dependency for local testing. For production
+# or heavy loads, install and configure channels_redis and point BACKEND at
+# "channels_redis.core.RedisChannelLayer" with the appropriate CONFIG hosts.
 CHANNEL_LAYERS = {
-   "default": {
-       "BACKEND": "asgi_redis.RedisChannelLayer",
-       "CONFIG": {
-           "hosts": [os.environ.get('REDIS_URL', 'redis://localhost:6379')],
-       },
-       "ROUTING": "xerror.routing.channel_routing",
-   },
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    }
 }
+
+# ASGI entry (used by channels/runserver to locate ASGI callable)
+ASGI_APPLICATION = 'xerror.asgi.application'
 
 # Celery settings
 BROKER_URL = 'redis://localhost:6379/0'  # our redis address

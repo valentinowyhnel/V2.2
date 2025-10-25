@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-{% load staticfiles %}
+{% load static %}
 <html lang="en">
 
 
@@ -14,7 +14,7 @@
     <meta name="author" content="">
     <!-- Favicon icon -->
     <!-- <link rel="icon" type="image/png" sizes="16x16" href="https://www.wrappixel.com/demos/admin-templates/material-pro/assets/images/favicon.png"> -->
-    <title>Vul Scanning Detail</title>
+    <title>Vulnerability Scanning Detail</title>
 
 
      <!-- <link rel="stylesheet" href="{% static "css/bootstrap.min.css" %}" type="text/css" />  -->
@@ -68,7 +68,7 @@ background-position: center ;
             <nav class="">
 
                 <div class="top-navbar navbar navbar-header" style="background: #db9a1aeb;"><!-- ffb22b -->
-                    <a class="navbar-brand" href="index.html" style="margin-left:5px;">
+                    <a class="navbar-brand" href="{% url 'parsing:index' %}" style="margin-left:5px;">
                         <!-- Logo icon --><b>
                             <!--You can put here icon as well // <i class="wi wi-sunset"></i> //-->
                             <!-- Dark Logo icon -->
@@ -120,7 +120,7 @@ background-position: center ;
                         <li> <a class="has-arrow waves-effect waves-light" href="{% url 'parsing:nm_scan_index' %}" ><i   class="mdi mdi-account-search active"></i><span class="hide-menu" >Scanning </span></a>
                             
                         </li>
-                        <li > <a class="has-arrow waves-effect waves-light" style="color: #f7b12c;" href="{% url 'parsing:openvas_scan_index'  %}" ><i  style="color: #f7b12c;" class="mdi mdi-barcode-scan"></i><span class="hide-menu">Vul Scanning</span></a>
+                        <li > <a class="has-arrow waves-effect waves-light" style="color: #f7b12c;" href="{% url 'parsing:openvas_scan_index'  %}" ><i  style="color: #f7b12c;" class="mdi mdi-barcode-scan"></i><span class="hide-menu">Vulnerability Scanning</span></a>
                            
                         </li>
                         <li> <a class="has-arrow waves-effect waves-dark" href="#" aria-expanded="false"><i class="mdi mdi-biohazard"></i><span class="hide-menu">Exploitation</span></a>
@@ -155,9 +155,9 @@ background-position: center ;
 
             <!-- Bottom points-->
             <div class="sidebar-footer">
-                <!-- item--><a href="#" class="link" data-toggle="tooldtip" title="Settings"><i class="ti-settings"></i></a>
+                <!-- item--><a href="#" class="link" data-toggle="tooltip" title="Settings"><i class="ti-settings"></i></a>
 
-                <!-- item--><a href="#" class="link" data-toggle="tooltidp" title="Email"><i class="mdi mdi-gmail"></i></a>
+                <!-- item--><a href="#" class="link" data-toggle="tooltip" title="Email"><i class="mdi mdi-gmail"></i></a>
 
                 <!-- item--><a href="#" class="link" data-toggle="tooltip" title="Logout"><i class="mdi mdi-power"></i></a>
             </div>
@@ -177,9 +177,9 @@ background-position: center ;
                         <h3 class="text-themecolor">Vulnerability Scanning Report </h3>
                         <ol class="breadcrumb">
 
-                            <li class="breadcrumb-item active">Hone</li>
+                            <li class="breadcrumb-item active">Home</li>
                             <li class="breadcrumb-item active">Scanning</li>
-                            <li class="breadcrumb-item active">Vul Scanning</li>
+                            <li class="breadcrumb-item active">Vulnerability Scanning</li>
                             <li class="breadcrumb-item "><a href="javascript:void(0)">Vul Report</a></li>
                         </ol>
                     </div>
@@ -350,7 +350,7 @@ background-position: center ;
                             <div class="">
                                 <div class="d-flex flex-wrap">
                                     <div>
-                                        <h3 class="card-title">Completed Detailed Vulnerability Scanes Report </h3>
+                                        <h3 class="card-title">Completed Detailed Vulnerability Scans Report </h3>
                                         <h6 class="card-subtitle">Detail Report </h6>
                                     </div>
                                     <div class="ml-auto align-self-center">
@@ -440,10 +440,10 @@ background-position: center ;
                                       </div>
                                 <div class="row text-center">
                                     <div class="col-lg-4 col-md-4 mt-3">
-                                        <h1 class="mb-0 font-weight-light">81</h1><small>Total Scan</small>
+                                        <h1 class="mb-0 font-weight-light">81</h1><small>Total Scans</small>
                                     </div>
                                     <div class="col-lg-4 col-md-4 mt-3">
-                                        <h1 class="mb-0 font-weight-light">67</h1><small>Reporte Generated</small>
+                                        <h1 class="mb-0 font-weight-light">67</h1><small>Reports Generated</small>
                                     </div>
                                     <div class="col-lg-4 col-md-4 mt-3">
                                         <h1 class="mb-0 font-weight-light">14</h1><small>Pending</small>
