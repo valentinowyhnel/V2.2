@@ -246,9 +246,6 @@ cd xerror && ../env/bin/python manage.py migrate
 sudo msfrpcd -P <password> -S -U msf -a 127.0.0.1 -p 55553
 ```
 
-Si vous voulez, je peux :
-- ajouter un `scan_helper.py` et un unit file prêt à l'emploi pour exécuter les scans privilégiés de façon contrôlée,
-- ou modifier `parsing/tasks.py` pour détecter automatiquement les capacités de `nmap` et basculer sur un profil non privilégié.
 
 -----
 
